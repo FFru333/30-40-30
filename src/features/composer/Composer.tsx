@@ -9,6 +9,7 @@ import { evaluate, type ZoneStatus } from '../../domain/zone/status';
 import { planGroups, type Plan } from '../../domain/zone/plan';
 import { balance, type Advice, type Suggestion } from '../../domain/zone/balance';
 import { MacroSig } from '../../ui/MacroSig';
+import { GramsInput } from '../../ui/GramsInput';
 import { allowedFoods, newId, useFoodMap, useFoods, useProfiles } from '../../app/data';
 import { BlockMatrix } from '../../ui/Blocks';
 import { IconPlus } from '../../ui/icons';
@@ -36,6 +37,12 @@ function shortStatus(s: ZoneStatus): string {
 }
 
 const stepFor = (g: number) => (g < 20 ? 1 : 5);
+
+const MOOD_COLOR = { in: '#b0c0af', out: '#bdabb1', empty: '#c9c7c0' } as const;
+/** La barra del browser/telefono prende la tinta dello stato. */
+function setThemeColor(mood: keyof typeof MOOD_COLOR) {
+  for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = MOOD_COLOR[mood];
+}
 
 const PLAN_TITLE: Record<Plan['kind'], string> = {
   fill: 'Completa',
@@ -65,11 +72,28 @@ export function Composer() {
     db.drafts.get('current').then((d) => setDraft(d ?? EMPTY_DRAFT));
   }, []);
   const saveTimer = useRef<number | undefined>(undefined);
+  const latest = useRef<Draft | null>(null);
   useEffect(() => {
     if (!draft) return;
+    latest.current = draft;
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => void db.drafts.put(draft), 250);
   }, [draft]);
+  // Se l'app va in background o si cambia schermata, salva subito: niente modifiche perse.
+  useEffect(() => {
+    const flush = () => {
+      window.clearTimeout(saveTimer.current);
+      if (latest.current) void db.drafts.put(latest.current);
+    };
+    const onHide = () => document.visibilityState === 'hidden' && flush();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      flush();
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, []);
 
   const profile: Profile | undefined = profiles?.find((p) => p.id === draft?.activeProfileId) ?? profiles?.[0];
   const items = draft?.items ?? [];
@@ -101,7 +125,9 @@ export function Composer() {
   const moodNow = !profile || !items.length ? 'empty' : evaluate(totals, target, profile.tolerance).inZone ? 'in' : 'out';
   useEffect(() => {
     document.documentElement.dataset.mood = moodNow;
+    setThemeColor(moodNow);
   }, [moodNow]);
+  const [openTweaks, setOpenTweaks] = useState<Set<string>>(() => new Set());
 
   if (!foods || !profiles || !draft || !profile) return <div className="loading">Carico…</div>;
 
@@ -134,6 +160,7 @@ export function Composer() {
       blocksByProfile: { ...d.blocksByProfile, [profile.id]: p.targetBlocks },
     }));
     setStrategy(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const applyTweak = (a: Advice, o: Suggestion) => {
@@ -292,15 +319,11 @@ export function Composer() {
                     <button className="grams__btn" onClick={() => setGrams(i, it.grams - step)} aria-label="Meno">
                       −
                     </button>
-                    <input
+                    <GramsInput
                       id={`grams-${it.foodId}`}
-                      className="grams__in"
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      value={Number.isFinite(it.grams) ? it.grams : 0}
-                      onChange={(e) => setGrams(i, Number(e.target.value.replace(',', '.')) || 0)}
-                      aria-label={`Grammi di ${f.name}`}
+                      grams={it.grams}
+                      onChange={(g) => setGrams(i, g)}
+                      label={`Grammi di ${f.name}`}
                     />
                     <span className="grams__u">g</span>
                     <button className="grams__btn" onClick={() => setGrams(i, it.grams + step)} aria-label="Più">
@@ -459,7 +482,7 @@ export function Composer() {
                     <span> · {n1(a.grams)} g</span>
                   </p>
                   <div className="tweak__opts">
-                    {a.options.map((o) => {
+                    {(openTweaks.has(a.macro) ? a.options : a.options.slice(0, 3)).map((o) => {
                       const f = foodMap.get(o.foodId);
                       return (
                         <button key={o.foodId} className="tweak__opt" onClick={() => applyTweak(a, o)}>
@@ -477,6 +500,11 @@ export function Composer() {
                       );
                     })}
                     {a.options.length === 0 && <p className="note">Nessun alimento adatto in archivio.</p>}
+                    {a.options.length > 3 && !openTweaks.has(a.macro) && (
+                      <button className="more" onClick={() => setOpenTweaks((s) => new Set([...s, a.macro]))}>
+                        Altri {a.options.length - 3}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

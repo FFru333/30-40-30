@@ -25,4 +25,26 @@ const html = `<title>Zone Planner</title>
 <script type="module">${script}</script>
 `;
 writeFileSync('dist-artifact/zone-planner.html', html);
-console.log(`dist-artifact/zone-planner.html ${(html.length / 1024).toFixed(0)} KB`);
+
+// Versione autonoma: un solo file .html da salvare e aprire nel browser, anche offline
+// (senza rete usa il font di sistema; la scansione delle etichette lì non c'è).
+const standalone = `<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c9c7c0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Zona">
+<title>Zone Planner</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&display=swap">
+<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(icon)}">
+<style>${style}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">${script}</script>
+</body>
+</html>
+`;
+writeFileSync('dist-artifact/zone-planner-standalone.html', standalone);

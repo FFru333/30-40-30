@@ -41,8 +41,17 @@ npm run build     # build di produzione in dist/
 
 ## Pubblicazione
 
-`.github/workflows/deploy.yml` pubblica su GitHub Pages a ogni push su `main`.
-Una tantum: Settings → Pages → Source: **GitHub Actions**.
+Tre modi di usarla:
+
+1. **GitHub Pages (consigliato, installabile e offline).** La build è già in `docs/`.
+   Settings → Pages → Source: *Deploy from a branch* → branch `claude/zone-planner-app-pp34fs`
+   (o `main` dopo il merge), cartella `/docs`. Indirizzo: `https://ffru333.github.io/30-40-30/`.
+   Su iPhone: Safari → Condividi → *Aggiungi alla schermata Home*.
+2. **File unico** `docs/zone-planner.html`: si salva e si apre nel browser, anche senza rete.
+3. **Pagina Claude** (artifact): l'unica dove funziona la scansione delle etichette.
+
+Rigenerare tutto: `npm run build:all` (aggiorna `docs/` e il file unico).
+Il workflow `.github/workflows/deploy.yml` resta come alternativa (Source: GitHub Actions, da `main`).
 
 ## Dati alimentari
 

@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "build:artifact": "node scripts/build-artifact.mjs"
+    "build:artifact": "node scripts/build-artifact.mjs",
+    "build:pages": "PAGES=1 tsc -b && PAGES=1 vite build && cp dist-artifact/zone-planner-standalone.html docs/zone-planner.html && touch docs/.nojekyll",
+    "build:all": "npm run build:artifact && npm run build:pages"
   },
   "dependencies": {
     "dexie": "^4.4.7",

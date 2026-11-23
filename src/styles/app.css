@@ -4,6 +4,18 @@
   box-sizing: border-box;
 }
 
+/* Proprietà registrate: così i punti dei blocchi si riempiono con una transizione. */
+@property --f {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+@property --t {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   padding-top: env(safe-area-inset-top, 0px);
@@ -227,10 +239,11 @@ sup {
 .kinds {
   display: flex;
   gap: 18px;
-  margin-top: 18px;
+  margin-top: 8px;
 }
 
 .kinds__btn {
+  min-height: 40px;
   padding: 2px 0;
   border: 0;
   background: transparent;
@@ -258,6 +271,11 @@ sup {
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.card .btn:not(.btn--primary):not(.btn--ghost):not(.btn--danger),
+.card .pill:not(.pill--solid):not(.pill--ghost) {
+  background: var(--mood-plain);
 }
 
 .pill--solid,
@@ -299,7 +317,7 @@ sup {
 }
 
 .chip {
-  min-height: 34px;
+  min-height: 40px;
   padding: 0 14px;
   border: 0;
   border-radius: 999px;
@@ -347,8 +365,9 @@ sup {
 }
 
 .x {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
+  margin: -4px -4px 0 0;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -360,6 +379,7 @@ sup {
 
 .switch {
   position: relative;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -473,6 +493,9 @@ sup {
   border-radius: 50%;
   background: conic-gradient(var(--faint) calc(var(--t) * 360deg), transparent 0);
   box-shadow: inset 0 0 0 1px var(--faint);
+  transition:
+    --f 260ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    --t 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .blk::after {
@@ -483,7 +506,6 @@ sup {
   background: var(--ink);
   -webkit-mask: conic-gradient(#000 calc(var(--f) * 360deg), transparent 0);
   mask: conic-gradient(#000 calc(var(--f) * 360deg), transparent 0);
-  transition: -webkit-mask 160ms, mask 160ms;
 }
 
 .blk.is-extra {
@@ -725,9 +747,10 @@ sup {
 
 .item__row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   margin-top: 8px;
 }
 
@@ -1254,7 +1277,7 @@ sup {
   border: 0;
   border-radius: 14px;
   background: var(--mood-plain);
-  font: 13px/1.4 ui-monospace, Menlo, monospace;
+  font: 16px/1.4 ui-monospace, Menlo, monospace;
 }
 
 .confirm {
@@ -1332,14 +1355,14 @@ sup {
 .sig__bar small {
   position: absolute;
   bottom: -13px;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 600;
   color: var(--muted);
 }
 
 .sig__label {
   margin-top: 10px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1434,4 +1457,72 @@ sup {
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* ---------- Risposta al tocco ---------- */
+
+button,
+.pill,
+.btn,
+.tabs__a,
+label.scan__row,
+label.pill {
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+button:active:not(:disabled),
+.tabs__a:active,
+label.scan__row:active,
+label.pill:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) {
+  button:hover:not(:disabled),
+  .tabs__a:hover,
+  label.scan__row:hover,
+  label.pill:hover {
+    opacity: 0.82;
+  }
+}
+
+.more {
+  justify-self: start;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(11, 11, 11, 0.25);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.item {
+  animation: rise 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }

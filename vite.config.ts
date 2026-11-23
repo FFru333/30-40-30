@@ -5,10 +5,16 @@ import { VitePWA } from 'vite-plugin-pwa';
 // base relativa: funziona su GitHub Pages (/<repo>/) e in locale.
 // VITE_ARTIFACT=1: build senza service worker, impacchettata in un solo file da scripts/build-artifact.mjs.
 const artifact = !!process.env.VITE_ARTIFACT;
+// PAGES=1: build per GitHub Pages servita dalla cartella docs/ del branch.
+const pages = !!process.env.PAGES;
 
 export default defineConfig({
   base: './',
-  build: artifact ? { outDir: 'dist-artifact', emptyOutDir: true } : undefined,
+  build: artifact
+    ? { outDir: 'dist-artifact', emptyOutDir: true }
+    : pages
+      ? { outDir: 'docs', emptyOutDir: true }
+      : undefined,
   plugins: [
     react(),
     !artifact && VitePWA({
@@ -34,6 +40,6 @@ export default defineConfig({
     }),
   ],
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });
