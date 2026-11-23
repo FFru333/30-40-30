@@ -39,6 +39,8 @@ export interface BalanceInput {
   /** Alimenti che il profilo può mangiare (dieta ed esclusioni già applicate). */
   pool: Food[];
   maxOptions?: number;
+  /** false: non scartare le opzioni meno buone della migliore (più scelta, ordinate). */
+  strict?: boolean;
 }
 
 function macroPer100(food: Food, m: Macro): number {
@@ -203,7 +205,7 @@ export function balance(input: BalanceInput): Advice[] {
     scored.sort((a, b) => a.score - b.score || a.suggestion.grams - b.suggestion.grams);
     // Non mostrare opzioni nettamente peggiori della migliore (es. che sforano un altro macro).
     const best = Math.min(...scored.map((x) => x.cost));
-    const kept = scored.filter((x) => x.cost <= best + 0.01);
+    const kept = input.strict === false ? scored : scored.filter((x) => x.cost <= best + 0.01);
     advice.push({
       macro: m,
       direction: needGrams > 0 ? 'add' : 'remove',

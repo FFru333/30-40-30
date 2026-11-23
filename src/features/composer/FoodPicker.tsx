@@ -10,6 +10,7 @@ import { readingNotice } from '../scan/notice';
 import type { LabelReading } from '../../domain/food/label';
 import { searchFoods } from '../../domain/food/search';
 import { SourceBadge } from '../../ui/SourceBadge';
+import { MacroSig } from '../../ui/MacroSig';
 import { n1 } from '../../ui/format';
 
 
@@ -98,6 +99,7 @@ export function FoodPicker({
         {list.map(({ f, why }) => (
           <li key={f.id}>
             <button className="pick" disabled={!!why} onClick={() => onPick(f)}>
+              <MacroSig food={f} label />
               <span className="pick__name">
                 {f.name} <SourceBadge food={f} />
                 {f.ingredients && <span className="badge">piatto</span>}

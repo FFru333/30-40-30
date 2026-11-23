@@ -5,6 +5,7 @@ import { netCarbs } from '../../domain/zone/blocks';
 import { newId, useFoods } from '../../app/data';
 import { searchFoods } from '../../domain/food/search';
 import { SourceBadge } from '../../ui/SourceBadge';
+import { MacroSig } from '../../ui/MacroSig';
 import { n0, n1 } from '../../ui/format';
 import { FoodForm } from './FoodForm';
 import { ScanButton } from '../scan/ScanButton';
@@ -112,6 +113,7 @@ export function FoodsScreen() {
         {list.map((f) => (
           <li key={f.id}>
             <button className="food" onClick={() => setEditing(f)}>
+              <MacroSig food={f} label />
               <span className="food__name">
                 {f.name} <SourceBadge food={f} />
                 {f.ingredients && <span className="badge">piatto</span>}

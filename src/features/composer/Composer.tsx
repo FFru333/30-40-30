@@ -7,6 +7,8 @@ import { MACROS, gramsToBlocks } from '../../domain/zone/blocks';
 import { foodMacros, kcalSplit, mealTotals } from '../../domain/zone/meal';
 import { evaluate, type ZoneStatus } from '../../domain/zone/status';
 import { planGroups, type Plan } from '../../domain/zone/plan';
+import { balance, type Advice, type Suggestion } from '../../domain/zone/balance';
+import { MacroSig } from '../../ui/MacroSig';
 import { allowedFoods, newId, useFoodMap, useFoods, useProfiles } from '../../app/data';
 import { BlockMatrix } from '../../ui/Blocks';
 import { IconPlus } from '../../ui/icons';
@@ -80,9 +82,19 @@ export function Composer() {
   const groups = useMemo(
     () =>
       profile && items.length
-        ? planGroups({ items, lookup, targetBlocks: target, tolerance: profile.tolerance, pool })
+        ? planGroups({ items, lookup, targetBlocks: target, tolerance: profile.tolerance, pool }, 5)
         : [],
     [items, foodMap, target, profile, pool], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  // Ritocchi singoli: per ogni macro fuori tolleranza, più alimenti da aggiungere o ridurre.
+  // Calcolati sui blocchi della strategia scelta: con "Tieni tutto" si completa fino al macro più alto.
+  const tweakTarget = (groups.find((g) => g.kind === strategy) ?? groups[0])?.targetBlocks ?? target;
+  const tweaks = useMemo(
+    () =>
+      profile && items.length
+        ? balance({ items, lookup, targetBlocks: tweakTarget, tolerance: profile.tolerance, pool, maxOptions: 6, strict: false })
+        : [],
+    [items, foodMap, tweakTarget, profile, pool], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // Il colore di fondo della pagina racconta lo stato del piatto.
@@ -122,6 +134,17 @@ export function Composer() {
       blocksByProfile: { ...d.blocksByProfile, [profile.id]: p.targetBlocks },
     }));
     setStrategy(null);
+  };
+
+  const applyTweak = (a: Advice, o: Suggestion) => {
+    const delta = a.direction === 'add' ? o.grams : -o.grams;
+    if (tweakTarget !== target) setTarget(tweakTarget);
+    setItems((xs) => {
+      const i = xs.findIndex((x) => x.foodId === o.foodId);
+      if (i < 0) return delta > 0 ? [...xs, { foodId: o.foodId, grams: delta }] : xs;
+      const g = xs[i]!.grams + delta;
+      return g <= 0.0001 ? xs.filter((_, j) => j !== i) : xs.map((x, j) => (j === i ? { ...x, grams: g } : x));
+    });
   };
 
   const saveDish = async (name: string) => {
@@ -256,6 +279,7 @@ export function Composer() {
             return (
               <li key={it.foodId} className="item">
                 <div className="item__top">
+                  <MacroSig food={f} label />
                   <span className="item__name">
                     {f.name} <SourceBadge food={f} />
                   </span>
@@ -399,6 +423,7 @@ export function Composer() {
                     {main.deltaGrams > 0 ? '+' : '−'}
                     {n0(Math.abs(main.deltaGrams))} g
                   </span>
+                  {foodMap.get(main.foodId) && <MacroSig food={foodMap.get(main.foodId)!} label size="lg" />}
                   <span className="variant__name">
                     {main.foodName}
                     {main.portionHint && <small> = {main.portionHint}</small>}
@@ -422,6 +447,41 @@ export function Composer() {
               );
             })}
           </div>
+
+          {tweaks.length > 0 && (
+            <>
+              <h3 className="h3">Oppure un ritocco alla volta{tweakTarget !== target && ` · a ${n1(tweakTarget)} bl`}</h3>
+              {tweaks.map((a) => (
+                <div key={a.macro} className="tweak">
+                  <p className="tweak__need">
+                    <strong>{MACRO_LABEL[a.macro]}</strong>{' '}
+                    {a.direction === 'add' ? `mancano ${n1(a.blocks)} bl` : `${n1(a.blocks)} bl in più`}
+                    <span> · {n1(a.grams)} g</span>
+                  </p>
+                  <div className="tweak__opts">
+                    {a.options.map((o) => {
+                      const f = foodMap.get(o.foodId);
+                      return (
+                        <button key={o.foodId} className="tweak__opt" onClick={() => applyTweak(a, o)}>
+                          {f && <MacroSig food={f} />}
+                          <span className="tweak__txt">
+                            <strong>
+                              {a.direction === 'add' ? '+' : '−'}
+                              {n0(o.grams)} g
+                            </strong>{' '}
+                            {o.foodName}
+                            {o.portionHint && <small> = {o.portionHint}</small>}
+                          </span>
+                          <span className="tweak__after">{o.inZoneAfter ? 'Zona' : MACROS.filter((m) => o.after[m] !== 'ok').map((m) => `${MACRO_SHORT[m]}${o.after[m] === 'low' ? '↓' : '↑'}`).join(' ')}</span>
+                        </button>
+                      );
+                    })}
+                    {a.options.length === 0 && <p className="note">Nessun alimento adatto in archivio.</p>}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </section>
       )}
 

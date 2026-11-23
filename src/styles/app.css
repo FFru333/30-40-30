@@ -899,9 +899,12 @@ sup {
 
 .pick,
 .food {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 14px;
+  row-gap: 3px;
+  align-items: center;
   width: 100%;
   min-height: 60px;
   padding: 12px 0;
@@ -1268,4 +1271,167 @@ sup {
   .grid2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- Firma del macro forte ---------- */
+
+.sig {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
+.pick .sig,
+.food .sig,
+.item__top .sig {
+  grid-row: 1 / span 2;
+  width: 72px;
+}
+
+.sig__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 30px;
+}
+
+.sig--lg .sig__bars {
+  height: 40px;
+  gap: 4px;
+}
+
+.sig__bar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  width: 9px;
+  height: 100%;
+}
+
+.sig--lg .sig__bar {
+  width: 12px;
+}
+
+.sig__bar > span {
+  display: block;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--hatch);
+  box-shadow: inset 0 0 0 1px rgba(11, 11, 11, 0.3);
+}
+
+.sig__bar.is-top > span {
+  background: currentColor;
+  box-shadow: none;
+}
+
+.sig__bar small {
+  position: absolute;
+  bottom: -13px;
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.sig__label {
+  margin-top: 10px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.sig--mixed .sig__label {
+  color: var(--muted);
+}
+
+.item__top .sig {
+  margin: 2px 4px 0 0;
+}
+
+.item__top {
+  justify-content: flex-start;
+}
+
+.item__top .x {
+  margin-left: auto;
+}
+
+.variant .sig {
+  align-self: flex-start;
+  margin-top: 16px;
+}
+
+.variant .sig__bar small {
+  color: inherit;
+  opacity: 0.6;
+}
+
+.variant--first .sig__bar > span {
+  box-shadow: inset 0 0 0 1px rgba(244, 243, 239, 0.45);
+  background: repeating-linear-gradient(135deg, rgba(244, 243, 239, 0.7) 0 1.5px, transparent 1.5px 5px);
+}
+
+.variant--first .sig__bar.is-top > span {
+  background: var(--on-ink);
+}
+
+.variant .variant__g {
+  padding-top: 12px;
+}
+
+/* ---------- Ritocchi singoli ---------- */
+
+.tweak {
+  margin-top: 14px;
+}
+
+.tweak__need {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.tweak__need span {
+  color: var(--muted);
+}
+
+.tweak__opts {
+  display: grid;
+  gap: 6px;
+}
+
+.tweak__opt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 62px;
+  padding: 8px 14px 16px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: left;
+}
+
+.tweak__opt .sig__label {
+  display: none;
+}
+
+.tweak__txt {
+  font-size: 15px;
+}
+
+.tweak__txt small {
+  color: var(--muted);
+}
+
+.tweak__after {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
