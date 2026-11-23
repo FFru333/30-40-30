@@ -1,107 +1,54 @@
 /*
- * Layout: testata sfumata a tutta larghezza (stato del pasto), poi riquadri grigi chiari
- *         con riempimento colorato per macro; numeri grandi e leggeri; barra icone in basso.
- * Colore: carta bianca, riquadri grigio caldo, inchiostro quasi nero; un colore per macro
- *         (pastello come riempimento, saturo come testo); sfumatura della testata per stato.
- * Tipo:   Inter Tight in pesi leggeri per i numeri, medi per i titoli con il punto finale.
+ * Layout: pagina a tinta piena che cambia con lo stato del piatto (salvia = in Zona,
+ *         rosa cipria = fuori, grigio caldo = vuoto); titoli grotesk su due righe;
+ *         i blocchi sono punti: neri raggiunti, grigi mancanti, tratteggiati in più.
+ * Colore: un solo inchiostro nero su toni desaturati; superfici bianche traslucide.
+ *         Scelta deliberata di un unico aspetto (niente tema scuro): i fondi di stato
+ *         sono l'informazione principale e funzionano solo così.
+ * Tipo:   Inter Tight, semibold stretto per titoli e numeri, regular per il resto.
  */
 :root {
-  --paper: #ffffff;
-  --tile: #f2f2f0;
-  --tile-2: #e9e9e6;
-  --ink: #111110;
-  --muted: #858580;
-  --line: #e6e6e2;
-  --glass: rgba(255, 255, 255, 0.62);
-  --glass-line: rgba(255, 255, 255, 0.85);
+  --mood-in: #b0c0af;
+  --mood-out: #bdabb1;
+  --mood-empty: #c9c7c0;
+  --mood-plain: #ecebe8;
+  --bg: var(--mood-empty);
 
-  --protein: #2f5bd3;
-  --protein-fill: #d4e0fb;
-  --carbs: #8a6300;
-  --carbs-fill: #f6df82;
-  --fat: #3e7a2e;
-  --fat-fill: #cfe6c4;
+  --ink: #0b0b0b;
+  --muted: rgba(11, 11, 11, 0.55);
+  --faint: rgba(11, 11, 11, 0.13);
+  --line: rgba(11, 11, 11, 0.12);
+  --surface: rgba(255, 255, 255, 0.34);
+  --surface-strong: rgba(255, 255, 255, 0.72);
+  --on-ink: #f4f3ef;
+  --hatch: repeating-linear-gradient(135deg, rgba(11, 11, 11, 0.6) 0 1.5px, transparent 1.5px 5px);
 
-  --ok: #1f8a4c;
-  --warn: #c4561b;
-  --danger: #b3261e;
-
-  --sky-1: #8fb3f3;
-  --sky-2: #c9dbfb;
-  --ring-track: rgba(255, 255, 255, 0.55);
-  --hero-in: #b9d1ff;
-  --hero-in-2: #dfe9ff;
-  --hero-out: #ffd2a1;
-  --hero-out-2: #ffe9d2;
-  --hero-empty: #e3e5ea;
-  --hero-empty-2: #f1f2f5;
+  /* I macro non hanno colori propri in questo aspetto: si distinguono per posizione ed etichetta. */
+  --protein: var(--ink);
+  --carbs: var(--ink);
+  --fat: var(--ink);
+  --ok: #1d5a32;
+  --warn: #7a2a1a;
+  --danger: #8f1f14;
 
   --font: 'Inter Tight', 'Helvetica Neue', Helvetica, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial,
     sans-serif;
-  --r-tile: 22px;
-  --r-ctl: 999px;
-  --tabs-h: 64px;
+  --r: 20px;
+  --tabs-h: 58px;
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --paper: #0c0c0c;
-    --tile: #1a1a19;
-    --tile-2: #242423;
-    --ink: #f3f3f0;
-    --muted: #8f8f8a;
-    --line: #262625;
-    --glass: rgba(255, 255, 255, 0.08);
-    --glass-line: rgba(255, 255, 255, 0.14);
-    --protein: #9db7ff;
-    --protein-fill: #22345f;
-    --carbs: #f2c94c;
-    --carbs-fill: #4d3d0d;
-    --fat: #9fd38c;
-    --fat-fill: #243f22;
-    --ok: #5fd38f;
-    --warn: #ff9a5c;
-    --danger: #ff8a7d;
-    --sky-1: #1d3a74;
-    --sky-2: #142441;
-    --ring-track: rgba(255, 255, 255, 0.1);
-    --hero-in: #1b3463;
-    --hero-in-2: #121c30;
-    --hero-out: #4d2e12;
-    --hero-out-2: #24180d;
-    --hero-empty: #222326;
-    --hero-empty-2: #151517;
-    color-scheme: dark;
-  }
+:root[data-mood='in'] {
+  --bg: var(--mood-in);
 }
-
-:root[data-theme='dark'] {
-  --paper: #0c0c0c;
-  --tile: #1a1a19;
-  --tile-2: #242423;
-  --ink: #f3f3f0;
-  --muted: #8f8f8a;
-  --line: #262625;
-  --glass: rgba(255, 255, 255, 0.08);
-  --glass-line: rgba(255, 255, 255, 0.14);
-  --protein: #9db7ff;
-  --protein-fill: #22345f;
-  --carbs: #f2c94c;
-  --carbs-fill: #4d3d0d;
-  --fat: #9fd38c;
-  --fat-fill: #243f22;
-  --ok: #5fd38f;
-  --warn: #ff9a5c;
-  --danger: #ff8a7d;
-  --sky-1: #1d3a74;
-  --sky-2: #142441;
-  --ring-track: rgba(255, 255, 255, 0.1);
-  --hero-in: #1b3463;
-  --hero-in-2: #121c30;
-  --hero-out: #4d2e12;
-  --hero-out-2: #24180d;
-  --hero-empty: #222326;
-  --hero-empty-2: #151517;
-  color-scheme: dark;
+:root[data-mood='out'] {
+  --bg: var(--mood-out);
+}
+:root[data-mood='empty'] {
+  --bg: var(--mood-empty);
+}
+:root[data-mood='plain'] {
+  --bg: var(--mood-plain);
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
 }

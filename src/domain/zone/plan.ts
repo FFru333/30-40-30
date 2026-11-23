@@ -135,3 +135,42 @@ export function plans(input: PlanInput): Plan[] {
   }
   return out;
 }
+
+export interface PlanGroup {
+  kind: Plan['kind'];
+  targetBlocks: number;
+  /** Varianti diverse dello stesso piano (alimento principale diverso). */
+  variants: Plan[];
+}
+
+/**
+ * Più modi di controbilanciare: per ogni strategia fino a `n` varianti, ognuna con
+ * un alimento principale diverso (tonno, poi gamberi, poi uova…).
+ */
+export function planGroups(input: PlanInput, n = 3): PlanGroup[] {
+  const first = plans(input);
+  return first.map((p0) => {
+    const variants: Plan[] = [p0];
+    const seen = new Set([signature(p0)]);
+    const ex = new Set(input.exclude ?? []);
+    let prev = p0;
+    for (let i = 1; i < n; i++) {
+      const main = prev.changes.find((c) => c.deltaGrams > 0 && !input.items.some((it) => it.foodId === c.foodId));
+      if (!main) break;
+      ex.add(main.foodId);
+      // Varietà vera: dopo "Tonno al naturale" non proporre "Tonno fresco".
+      const head = main.foodName.split(/[\s(]/)[0]!.toLowerCase();
+      for (const f of input.pool) if (f.name.split(/[\s(]/)[0]!.toLowerCase() === head) ex.add(f.id);
+      const next = plans({ ...input, exclude: ex }).find((p) => p.kind === p0.kind);
+      if (!next || !next.after.inZone || seen.has(signature(next))) break;
+      seen.add(signature(next));
+      variants.push(next);
+      prev = next;
+    }
+    return { kind: p0.kind, targetBlocks: p0.targetBlocks, variants };
+  });
+}
+
+function signature(p: Plan): string {
+  return p.changes.map((c) => `${c.foodId}:${Math.round(c.deltaGrams)}`).join('|');
+}

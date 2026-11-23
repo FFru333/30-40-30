@@ -6,12 +6,12 @@ import { buildComposite } from '../../domain/food/composite';
 import { MACROS, gramsToBlocks } from '../../domain/zone/blocks';
 import { foodMacros, kcalSplit, mealTotals } from '../../domain/zone/meal';
 import { evaluate, type ZoneStatus } from '../../domain/zone/status';
-import { plans, type Plan } from '../../domain/zone/plan';
+import { planGroups, type Plan } from '../../domain/zone/plan';
 import { allowedFoods, newId, useFoodMap, useFoods, useProfiles } from '../../app/data';
-import { MacroStats, Ring } from '../../ui/Ring';
+import { BlockMatrix } from '../../ui/Blocks';
 import { IconPlus } from '../../ui/icons';
 import { SourceBadge } from '../../ui/SourceBadge';
-import { MACRO_LABEL, MACRO_OF, blocchi, n0, n1 } from '../../ui/format';
+import { MACRO_LABEL, MACRO_OF, MACRO_SHORT, blocchi, n0, n1, pct } from '../../ui/format';
 import { FoodPicker } from './FoodPicker';
 
 function statusLine(s: ZoneStatus): string {
@@ -36,9 +36,15 @@ function shortStatus(s: ZoneStatus): string {
 const stepFor = (g: number) => (g < 20 ? 1 : 5);
 
 const PLAN_TITLE: Record<Plan['kind'], string> = {
-  fill: 'Completa il piatto',
-  adapt: 'Tieni tutto, adegua il resto',
-  fit: 'Resta nei tuoi blocchi',
+  fill: 'Completa',
+  adapt: 'Tieni tutto',
+  fit: 'Resta nei blocchi',
+};
+
+const PLAN_NOTE: Record<Plan['kind'], string> = {
+  fill: 'Aggiungi ciò che manca, il resto non cambia.',
+  adapt: 'Non togli niente: gli altri macro crescono fino a quello in eccesso.',
+  fit: 'Riduci ciò che eccede e completa, restando nei tuoi blocchi.',
 };
 
 export function Composer() {
@@ -50,7 +56,7 @@ export function Composer() {
   const [picking, setPicking] = useState(false);
   const [game, setGame] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
-  const [exclude, setExclude] = useState<Set<string>>(() => new Set());
+  const [strategy, setStrategy] = useState<Plan['kind'] | null>(null);
 
   // Carica la bozza una volta, poi la salva con un piccolo ritardo.
   useEffect(() => {
@@ -71,13 +77,19 @@ export function Composer() {
   const blocksFor = (p: Profile) => draft?.blocksByProfile[p.id] ?? p.blocksPerMeal;
   const target = profile ? blocksFor(profile) : 0;
   const pool = useMemo(() => (foods && profile ? allowedFoods(foods, profile) : []), [foods, profile]);
-  const planList = useMemo(
+  const groups = useMemo(
     () =>
       profile && items.length
-        ? plans({ items, lookup, targetBlocks: target, tolerance: profile.tolerance, pool, exclude })
+        ? planGroups({ items, lookup, targetBlocks: target, tolerance: profile.tolerance, pool })
         : [],
-    [items, foodMap, target, profile, pool, exclude], // eslint-disable-line react-hooks/exhaustive-deps
+    [items, foodMap, target, profile, pool], // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  // Il colore di fondo della pagina racconta lo stato del piatto.
+  const moodNow = !profile || !items.length ? 'empty' : evaluate(totals, target, profile.tolerance).inZone ? 'in' : 'out';
+  useEffect(() => {
+    document.documentElement.dataset.mood = moodNow;
+  }, [moodNow]);
 
   if (!foods || !profiles || !draft || !profile) return <div className="loading">Carico…</div>;
 
@@ -109,7 +121,7 @@ export function Composer() {
       items: p.items.map((x) => ({ ...x, grams: Math.round(x.grams * 10) / 10 })),
       blocksByProfile: { ...d.blocksByProfile, [profile.id]: p.targetBlocks },
     }));
-    setExclude(new Set());
+    setStrategy(null);
   };
 
   const saveDish = async (name: string) => {
@@ -117,82 +129,103 @@ export function Composer() {
     setSaving(null);
   };
 
+  const mood = empty ? 'empty' : status.inZone ? 'in' : 'out';
+  const group = groups.find((g) => g.kind === strategy) ?? groups[0];
+
   return (
     <div className="composer">
-      <section className="hero">
-        <div className="hero__inner">
-          <div className="hero__bar">
-            <div className="glass-seg" role="tablist" aria-label="Profilo">
-              {profiles.map((p) => (
-                <button
-                  key={p.id}
-                  role="tab"
-                  aria-selected={p.id === profile.id}
-                  className={`glass-seg__btn ${p.id === profile.id ? 'is-on' : ''}`}
-                  onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-            <div className="glass-step" aria-label="Blocchi del pasto">
-              <button onClick={() => setTarget(target - 0.5)} aria-label="Meno blocchi">
-                −
-              </button>
-              <span>
-                <strong>{n1(target)}</strong> bl
-              </span>
-              <button onClick={() => setTarget(target + 0.5)} aria-label="Più blocchi">
-                +
-              </button>
-            </div>
-          </div>
-          <div className="hero__kind">
+      <header className="top">
+        <div className="who" role="tablist" aria-label="Profilo">
+          {profiles.map((p) => (
             <button
-              className={`kind ${target === profile.blocksPerMeal ? 'is-on' : ''}`}
-              onClick={() => setTarget(profile.blocksPerMeal)}
+              key={p.id}
+              role="tab"
+              aria-selected={p.id === profile.id}
+              className={`who__btn ${p.id === profile.id ? 'is-on' : ''}`}
+              onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}
             >
-              Pasto · {n1(profile.blocksPerMeal)}
+              {p.name}
             </button>
-            <button
-              className={`kind ${target === profile.blocksPerSnack ? 'is-on' : ''}`}
-              onClick={() => setTarget(profile.blocksPerSnack)}
-            >
-              Spuntino · {n1(profile.blocksPerSnack)}
-            </button>
-            <button className="hero__add" onClick={() => setPicking(true)}>
-              <IconPlus size={18} /> Aggiungi
-            </button>
-          </div>
-
-          <Ring split={split} kcal={totals.kcalMacro} empty={empty} inZone={status.inZone} targetBlocks={target} />
-          <p className="hero__line" aria-live="polite">
-            {empty ? `Aggiungi alimenti: l’anello mostra la ripartizione rispetto a 30/40/30.` : statusLine(status)}
-          </p>
-          <MacroStats status={status} split={split} empty={empty} />
-
-          {!empty && others.length > 0 && (
-            <div className="others">
-              {others.map((p) => {
-                const s = evaluate(totals, blocksFor(p), p.tolerance);
-                return (
-                  <button key={p.id} className="others__btn" onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}>
-                    <span className={`dot ${s.inZone ? 'dot--ok' : 'dot--warn'}`} />
-                    <strong>{p.name}</strong>
-                    <span className="muted">{n1(blocksFor(p))} bl</span>
-                    <span className="others__s">{shortStatus(s)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          ))}
         </div>
-      </section>
+        <div className="step" aria-label="Blocchi del pasto">
+          <button onClick={() => setTarget(target - 0.5)} aria-label="Meno blocchi">
+            −
+          </button>
+          <span>{n1(target)} bl</span>
+          <button onClick={() => setTarget(target + 0.5)} aria-label="Più blocchi">
+            +
+          </button>
+        </div>
+      </header>
+
+      <h1 className="title" aria-live="polite">
+        {mood === 'empty' ? (
+          <>
+            Piatto
+            <br />
+            vuoto
+          </>
+        ) : mood === 'in' ? (
+          <>
+            In
+            <br />
+            Zona
+          </>
+        ) : (
+          <>
+            Fuori
+            <br />
+            Zona
+          </>
+        )}
+      </h1>
+      <p className="lede">{empty ? `${profile.name}: ${n1(target)} ${blocchi(target)} per pasto.` : statusLine(status)}</p>
+
+      <div className="kinds">
+        <button
+          className={`kinds__btn ${target === profile.blocksPerMeal ? 'is-on' : ''}`}
+          onClick={() => setTarget(profile.blocksPerMeal)}
+        >
+          Pasto<sup>{n1(profile.blocksPerMeal)}</sup>
+        </button>
+        <button
+          className={`kinds__btn ${target === profile.blocksPerSnack ? 'is-on' : ''}`}
+          onClick={() => setTarget(profile.blocksPerSnack)}
+        >
+          Spuntino<sup>{n1(profile.blocksPerSnack)}</sup>
+        </button>
+      </div>
+
+      <BlockMatrix status={status} empty={empty} />
+
+      <div className="sumrow">
+        <span>Totale</span>
+        <span className="sumrow__split">
+          {empty ? '' : MACROS.map((m) => `${MACRO_SHORT[m]} ${pct(split[m])}`).join('  ')}
+        </span>
+        <strong>{n0(totals.kcalMacro)} kcal</strong>
+      </div>
+
+      {!empty && others.length > 0 && (
+        <div className="others">
+          {others.map((p) => {
+            const s = evaluate(totals, blocksFor(p), p.tolerance);
+            return (
+              <button key={p.id} className="others__btn" onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}>
+                <strong>{p.name}</strong> <span>{n1(blocksFor(p))} bl</span> <span>{shortStatus(s)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <section className="section">
         <div className="section__row">
-          <h2 className="section__title">
-            Nel piatto. {!empty && <span className="section__sub">{items.length}</span>}
+          <h2 className="h2">
+            Nel
+            <br />
+            piatto
           </h2>
           {!empty && (
             <label className="switch">
@@ -208,7 +241,7 @@ export function Composer() {
             const f = foodMap.get(it.foodId);
             if (!f)
               return (
-                <li key={i} className="card item">
+                <li key={i} className="item">
                   <div className="item__top">
                     <span className="muted">Alimento eliminato</span>
                     <button className="x" onClick={() => removeAt(i)} aria-label="Togli">
@@ -221,7 +254,7 @@ export function Composer() {
             const step = stepFor(it.grams);
             const sliderMax = Math.max(50, Math.ceil(Math.max(it.grams * 2, (f.portion?.grams ?? 100) * 2) / 10) * 10);
             return (
-              <li key={it.foodId} className="card item">
+              <li key={it.foodId} className="item">
                 <div className="item__top">
                   <span className="item__name">
                     {f.name} <SourceBadge food={f} />
@@ -250,17 +283,17 @@ export function Composer() {
                       +
                     </button>
                   </div>
-                  <span className="item__blocks" aria-label="Blocchi P, C, G">
+                  <span className="item__blocks" aria-label="Blocchi proteine, carboidrati, grassi">
                     <span>
-                      <i className="dot dot--protein" />
+                      <small>P</small>
                       {n1(b.protein)}
                     </span>
                     <span>
-                      <i className="dot dot--carbs" />
+                      <small>C</small>
                       {n1(b.carbs)}
                     </span>
                     <span>
-                      <i className="dot dot--fat" />
+                      <small>G</small>
                       {n1(b.fat)}
                     </span>
                   </span>
@@ -280,123 +313,116 @@ export function Composer() {
               </li>
             );
           })}
-          <li>
-            <button className="card add-row" onClick={() => setPicking(true)}>
-              <span className="add-row__plus">
-                <IconPlus size={20} />
-              </span>
-              <span>
-                <strong>{empty ? 'Aggiungi il primo alimento' : 'Aggiungi alimento'}</strong>
-                <small>Cerca, piatti pronti o scansiona un’etichetta</small>
-              </span>
-            </button>
-          </li>
         </ul>
-        {!empty && <p className="legend">Blocchi per alimento: proteine · carboidrati · grassi</p>}
+
+        <button className="add" onClick={() => setPicking(true)}>
+          <IconPlus size={20} />
+          {empty ? 'Aggiungi il primo alimento' : 'Aggiungi alimento'}
+        </button>
+
+        {!empty && (
+          <div className="actions">
+            <button className="pill" onClick={() => setSaving('')}>
+              Salva come piatto
+            </button>
+            <button className="pill pill--ghost" onClick={() => setItems(() => [])}>
+              Svuota
+            </button>
+          </div>
+        )}
+
+        {saving !== null && (
+          <form
+            className="inline-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (saving.trim()) void saveDish(saving);
+            }}
+          >
+            <input
+              id="dish-name"
+              autoFocus
+              className="search"
+              placeholder="Nome del piatto, es. Wrap kebab"
+              value={saving}
+              onChange={(e) => setSaving(e.target.value)}
+            />
+            <button className="pill pill--solid" type="submit" disabled={!saving.trim()}>
+              Salva
+            </button>
+            <button className="pill pill--ghost" type="button" onClick={() => setSaving(null)}>
+              Annulla
+            </button>
+          </form>
+        )}
       </section>
 
-      {planList.length > 0 && (
+      {groups.length > 0 && group && (
         <section className="section">
-          <h2 className="section__title">
-            Bilancia. <span className="section__sub">Un tocco e sei in Zona.</span>
+          <h2 className="h2">
+            Contro-
+            <br />
+            bilancia
           </h2>
-          {planList.map((p) => {
-            const big = p.targetBlocks > profile.blocksPerMeal * 1.25;
-            return (
-              <div key={p.kind} className={`card plan plan--${p.kind}`}>
-                <div className="plan__head">
-                  <div>
-                    <p className="plan__title">{PLAN_TITLE[p.kind]}</p>
-                    <p className="plan__sub">
-                      {p.after.inZone ? 'In Zona' : 'Più vicino alla Zona'} a {n1(p.targetBlocks)} blocchi
-                      {big && ` · ${n1(p.targetBlocks / profile.blocksPerMeal)} pasti di ${profile.name}`}
-                    </p>
-                  </div>
-                  <p className="plan__big">
-                    {n1(p.targetBlocks)}
-                    <span>bl</span>
-                  </p>
-                </div>
-                <ul className="plan__list">
-                  {p.changes.map((c) => (
-                    <li key={c.foodId} className="plan__row">
-                      <span className={`plan__g ${c.deltaGrams > 0 ? 'is-add' : 'is-cut'}`}>
-                        {c.deltaGrams > 0 ? '+' : '−'}
-                        {n0(Math.abs(c.deltaGrams))} g
-                      </span>
-                      <span className="plan__name">
-                        {c.foodName}
-                        <small>
-                          {c.portionHint
-                            ? ` = ${c.portionHint}`
-                            : c.deltaGrams < 0
-                              ? c.newGrams > 0
-                                ? ` → ${n0(c.newGrams)} g`
-                                : ' (tutto)'
-                              : ''}
-                        </small>
-                      </span>
-                      {c.deltaGrams > 0 && (
-                        <button
-                          className="plan__swap"
-                          onClick={() => setExclude((s) => new Set([...s, c.foodId]))}
-                          aria-label={`Proponi un’alternativa a ${c.foodName}`}
-                          title="Un’altra opzione"
-                        >
-                          ↻
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <button className="pill pill--solid plan__apply" onClick={() => applyPlan(p)}>
-                  Applica
+          {groups.length > 1 && (
+            <div className="seg" role="tablist" aria-label="Strategia">
+              {groups.map((g) => (
+                <button
+                  key={g.kind}
+                  role="tab"
+                  aria-selected={g.kind === group.kind}
+                  className={`seg__btn ${g.kind === group.kind ? 'is-on' : ''}`}
+                  onClick={() => setStrategy(g.kind)}
+                >
+                  {PLAN_TITLE[g.kind]}
+                  <sup>{n1(g.targetBlocks)} bl</sup>
                 </button>
-              </div>
-            );
-          })}
-          {exclude.size > 0 && (
-            <button className="pill pill--ghost" onClick={() => setExclude(new Set())}>
-              Ripristina le proposte iniziali
-            </button>
+              ))}
+            </div>
           )}
+          <p className="note">
+            {PLAN_NOTE[group.kind]}
+            {group.targetBlocks > profile.blocksPerMeal * 1.25 &&
+              ` Diventa un pasto da ${n1(group.targetBlocks)} blocchi, ${n1(group.targetBlocks / profile.blocksPerMeal)} volte il tuo.`}
+          </p>
+          <div className="variants">
+            {group.variants.map((p, vi) => {
+              const main = p.changes[0]!;
+              const rest = p.changes.slice(1);
+              return (
+                <div key={vi} className={`variant ${vi === 0 ? 'variant--first' : ''}`}>
+                  <span className="variant__n">
+                    {vi === 0 ? 'Consigliato' : `Variante ${vi + 1}`}
+                    {!p.after.inZone && ' · quasi'}
+                  </span>
+                  <span className="variant__g">
+                    {main.deltaGrams > 0 ? '+' : '−'}
+                    {n0(Math.abs(main.deltaGrams))} g
+                  </span>
+                  <span className="variant__name">
+                    {main.foodName}
+                    {main.portionHint && <small> = {main.portionHint}</small>}
+                  </span>
+                  <ul className="variant__rest">
+                    {rest.map((c) => (
+                      <li key={c.foodId}>
+                        <span>
+                          {c.deltaGrams > 0 ? '+' : '−'}
+                          {n0(Math.abs(c.deltaGrams))} g
+                        </span>{' '}
+                        {c.foodName}
+                        {c.deltaGrams < 0 && c.newGrams > 0 && <small> → {n0(c.newGrams)} g</small>}
+                      </li>
+                    ))}
+                  </ul>
+                  <button className="variant__apply" onClick={() => applyPlan(p)}>
+                    Applica
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </section>
-      )}
-
-      {!empty && (
-        <div className="actions">
-          <button className="pill" onClick={() => setSaving('')}>
-            Salva come piatto
-          </button>
-          <button className="pill pill--ghost" onClick={() => setItems(() => [])}>
-            Svuota
-          </button>
-        </div>
-      )}
-
-      {saving !== null && (
-        <form
-          className="inline-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (saving.trim()) void saveDish(saving);
-          }}
-        >
-          <input
-            id="dish-name"
-            autoFocus
-            className="search"
-            placeholder="Nome del piatto, es. Wrap kebab"
-            value={saving}
-            onChange={(e) => setSaving(e.target.value)}
-          />
-          <button className="pill pill--solid" type="submit" disabled={!saving.trim()}>
-            Salva
-          </button>
-          <button className="pill pill--ghost" type="button" onClick={() => setSaving(null)}>
-            Annulla
-          </button>
-        </form>
       )}
 
       {totals.missing.length > 0 && (

@@ -57,3 +57,15 @@ describe('piano di bilanciamento', () => {
     expect(alt.changes.map((c) => c.foodId)).not.toContain(first);
   });
 });
+
+describe('varianti', async () => {
+  const { planGroups } = await import('./plan');
+  it('pizza: più modi di adeguare, con alimenti principali diversi, tutti in Zona', () => {
+    const groups = planGroups({ items: [{ foodId: 'pizza-margherita', grams: 330 }], lookup, targetBlocks: 3, tolerance: tol, pool: pescetarian });
+    const adapt = groups.find((g) => g.kind === 'adapt')!;
+    expect(adapt.variants.length).toBeGreaterThanOrEqual(2);
+    const mains = adapt.variants.map((v) => v.changes[0]!.foodId);
+    expect(new Set(mains).size).toBe(mains.length);
+    for (const v of adapt.variants) expect(v.after.inZone).toBe(true);
+  });
+});
