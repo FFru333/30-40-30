@@ -7,6 +7,9 @@ import { searchFoods } from '../../domain/food/search';
 import { SourceBadge } from '../../ui/SourceBadge';
 import { n0, n1 } from '../../ui/format';
 import { FoodForm } from './FoodForm';
+import { ScanButton } from '../scan/ScanButton';
+import { readingNotice } from '../scan/notice';
+import type { LabelReading } from '../../domain/food/label';
 
 
 const BLANK: Food = {
@@ -25,6 +28,7 @@ export function FoodsScreen() {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('tutti');
   const [editing, setEditing] = useState<Food | null>(null);
+  const [scanInfo, setScanInfo] = useState<{ notice: string; flagged: LabelReading['unreadable'] } | null>(null);
 
   const list = useMemo(() => {
     return searchFoods(foods ?? [], q).filter(
@@ -38,13 +42,22 @@ export function FoodsScreen() {
     const isNew = !editing.id;
     return (
       <div className="screen">
-        <h1 className="h1">{isNew ? 'Nuovo alimento' : 'Modifica alimento'}</h1>
+        <header className="head">
+          <h1 className="head__title">{isNew ? 'Nuovo alimento.' : 'Modifica.'}</h1>
+          <p className="head__sub">Valori per 100 g.</p>
+        </header>
         <FoodForm
           initial={editing}
-          onCancel={() => setEditing(null)}
+          notice={scanInfo?.notice}
+          flagged={scanInfo?.flagged}
+          onCancel={() => {
+            setEditing(null);
+            setScanInfo(null);
+          }}
           onSave={async (f) => {
             await db.foods.put(isNew ? { ...f, id: newId('food') } : f);
             setEditing(null);
+            setScanInfo(null);
           }}
           onDelete={
             isNew
@@ -63,15 +76,23 @@ export function FoodsScreen() {
 
   return (
     <div className="screen">
-      <div className="screen__head">
-        <h1 className="h1">Alimenti</h1>
-        <button className="btn btn--primary" onClick={() => setEditing({ ...BLANK })}>
+      <header className="head">
+        <h1 className="head__title">Alimenti.</h1>
+        <p className="head__sub">
+          {foods.length} in archivio, {nStima} da verificare.
+        </p>
+      </header>
+      <div className="actions">
+        <ScanButton
+          onRead={(r) => {
+            setScanInfo({ notice: readingNotice(r), flagged: r.unreadable });
+            setEditing(r.food);
+          }}
+        />
+        <button className="pill" onClick={() => setEditing({ ...BLANK })}>
           + Nuovo
         </button>
       </div>
-      <p className="muted small">
-        {foods.length} alimenti · {nStima} da verificare in etichetta. Valori per 100 g, carboidrati netti.
-      </p>
       <input className="search" type="search" placeholder="Cerca" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="chips">
         {(

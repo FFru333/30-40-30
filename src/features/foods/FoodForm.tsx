@@ -22,7 +22,11 @@ export function FoodForm({
   onSave,
   onDelete,
   onCancel,
+  notice,
+  flagged = [],
 }: {
+  notice?: string;
+  flagged?: NumKey[];
   initial: Food;
   onSave: (f: Food) => void;
   onDelete?: () => void;
@@ -72,6 +76,7 @@ export function FoodForm({
         submit();
       }}
     >
+      {notice && <p className="notice">{notice}</p>}
       <label className="field">
         <span>Nome</span>
         <input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -87,7 +92,7 @@ export function FoodForm({
                 inputMode="decimal"
                 value={nums[key]}
                 onChange={(e) => setNums((s) => ({ ...s, [key]: e.target.value }))}
-                aria-invalid={Number.isNaN(parsed[key])}
+                aria-invalid={Number.isNaN(parsed[key]) || flagged.includes(key)}
                 disabled={isComposite}
               />
             </label>

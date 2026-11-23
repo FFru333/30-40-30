@@ -5,6 +5,9 @@ import { netCarbs } from '../../domain/zone/blocks';
 import { newId, whyNotAllowed } from '../../app/data';
 import { db } from '../../db/schema';
 import { FoodForm } from '../foods/FoodForm';
+import { ScanButton } from '../scan/ScanButton';
+import { readingNotice } from '../scan/notice';
+import type { LabelReading } from '../../domain/food/label';
 import { searchFoods } from '../../domain/food/search';
 import { SourceBadge } from '../../ui/SourceBadge';
 import { n1 } from '../../ui/format';
@@ -22,7 +25,17 @@ export function FoodPicker({
   onClose: () => void;
 }) {
   const [q, setQ] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<{ initial: Food; notice?: string; flagged?: LabelReading['unreadable'] } | null>(
+    null,
+  );
+  const blank = (): Food => ({
+    id: '',
+    name: q.trim().replace(/^./, (c) => c.toUpperCase()),
+    per100: { kcal: 0, protein: 0, carbs: 0, fiber: 0, fat: 0 },
+    carbBasis: 'eu',
+    diet: 'vegano',
+    source: 'etichetta',
+  });
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
 
@@ -36,18 +49,18 @@ export function FoodPicker({
     return (
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Nuovo alimento">
         <div className="sheet__scroll">
-          <h1 className="h1">Nuovo alimento</h1>
-          <p className="muted small">Copia i valori per 100 g dall’etichetta. Verrà aggiunto anche al piatto.</p>
+          <header className="head">
+            <h1 className="head__title">Nuovo alimento.</h1>
+            <p className="head__sub">Valori per 100 g.</p>
+          </header>
+          {!creating.notice && (
+            <p className="muted small">Copia i valori per 100 g dall’etichetta. Verrà aggiunto anche al piatto.</p>
+          )}
           <FoodForm
-            initial={{
-              id: '',
-              name: q.trim().replace(/^./, (c) => c.toUpperCase()),
-              per100: { kcal: 0, protein: 0, carbs: 0, fiber: 0, fat: 0 },
-              carbBasis: 'eu',
-              diet: 'vegano',
-              source: 'etichetta',
-            }}
-            onCancel={() => setCreating(false)}
+            initial={creating.initial}
+            notice={creating.notice}
+            flagged={creating.flagged}
+            onCancel={() => setCreating(null)}
             onSave={async (f) => {
               const food = { ...f, id: newId('food') };
               await db.foods.put(food);
@@ -76,6 +89,12 @@ export function FoodPicker({
         </button>
       </div>
       <ul className="picklist">
+        <li>
+          <ScanButton
+            variant="row"
+            onRead={(r) => setCreating({ initial: r.food, notice: readingNotice(r), flagged: r.unreadable })}
+          />
+        </li>
         {list.map(({ f, why }) => (
           <li key={f.id}>
             <button className="pick" disabled={!!why} onClick={() => onPick(f)}>
@@ -104,7 +123,7 @@ export function FoodPicker({
         {list.length === 0 && <li className="empty">Nessun alimento trovato per “{q.trim()}”.</li>}
         {q.trim() && (
           <li>
-            <button className="pick pick--new" onClick={() => setCreating(true)}>
+            <button className="pick pick--new" onClick={() => setCreating({ initial: blank() })}>
               <span className="pick__name">+ Crea “{q.trim()}”</span>
               <span className="pick__meta muted">Inserisci i valori dall’etichetta</span>
             </button>

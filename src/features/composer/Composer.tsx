@@ -8,7 +8,8 @@ import { foodMacros, kcalSplit, mealTotals } from '../../domain/zone/meal';
 import { evaluate, type ZoneStatus } from '../../domain/zone/status';
 import { balance, type Advice, type Suggestion } from '../../domain/zone/balance';
 import { allowedFoods, newId, useFoodMap, useFoods, useProfiles } from '../../app/data';
-import { CalorieSplit, MacroBars } from '../../ui/MacroBars';
+import { MacroTiles, SplitChips } from '../../ui/MacroBars';
+import { IconPlus } from '../../ui/icons';
 import { SourceBadge } from '../../ui/SourceBadge';
 import { MACRO_LABEL, MACRO_OF, MACRO_SHORT, blocchi, n0, n1 } from '../../ui/format';
 import { FoodPicker } from './FoodPicker';
@@ -107,116 +108,143 @@ export function Composer() {
     setSaving(null);
   };
 
+  const heroState = items.length === 0 ? 'empty' : status.inZone ? 'in' : 'out';
+
   return (
     <div className="composer">
-      <header className="ctl">
-        <div className="seg" role="tablist" aria-label="Profilo">
-          {profiles.map((p) => (
-            <button
-              key={p.id}
-              role="tab"
-              aria-selected={p.id === profile.id}
-              className={`seg__btn ${p.id === profile.id ? 'is-on' : ''}`}
-              onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-        <div className="stepper" aria-label="Blocchi del pasto">
-          <button className="stepper__btn" onClick={() => setTarget(target - 0.5)} aria-label="Meno blocchi">
-            −
-          </button>
-          <span className="stepper__val">
-            <strong>{n1(target)}</strong> {blocchi(target)}
-          </span>
-          <button className="stepper__btn" onClick={() => setTarget(target + 0.5)} aria-label="Più blocchi">
-            +
-          </button>
-        </div>
-        <div className="chips">
-          <button
-            className={`chip ${target === profile.blocksPerMeal ? 'is-on' : ''}`}
-            onClick={() => setTarget(profile.blocksPerMeal)}
-          >
-            Pasto · {n1(profile.blocksPerMeal)}
-          </button>
-          <button
-            className={`chip ${target === profile.blocksPerSnack ? 'is-on' : ''}`}
-            onClick={() => setTarget(profile.blocksPerSnack)}
-          >
-            Spuntino · {n1(profile.blocksPerSnack)}
-          </button>
-        </div>
-      </header>
+      <section className={`hero hero--${heroState}`}>
+        <div className="hero__inner">
+          <div className="hero__bar">
+            <div className="glass-seg" role="tablist" aria-label="Profilo">
+              {profiles.map((p) => (
+                <button
+                  key={p.id}
+                  role="tab"
+                  aria-selected={p.id === profile.id}
+                  className={`glass-seg__btn ${p.id === profile.id ? 'is-on' : ''}`}
+                  onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+            <div className="glass-step" aria-label="Blocchi del pasto">
+              <button onClick={() => setTarget(target - 0.5)} aria-label="Meno blocchi">
+                −
+              </button>
+              <span>
+                <strong>{n1(target)}</strong> bl
+              </span>
+              <button onClick={() => setTarget(target + 0.5)} aria-label="Più blocchi">
+                +
+              </button>
+            </div>
+          </div>
 
-      <section className={`verdict ${items.length === 0 ? 'is-empty' : status.inZone ? 'is-in' : 'is-out'}`} aria-live="polite">
-        <h1 className="verdict__title">
-          {items.length === 0 ? 'Piatto vuoto' : status.inZone ? 'In Zona' : 'Fuori Zona'}
-        </h1>
-        <p className="verdict__line">
-          {items.length === 0
-            ? `Obiettivo ${profile.name}: ${n1(target)} ${blocchi(target)}.`
-            : statusLine(status)}
-        </p>
+          <div className="hero__kind">
+            <button
+              className={`kind ${target === profile.blocksPerMeal ? 'is-on' : ''}`}
+              onClick={() => setTarget(profile.blocksPerMeal)}
+            >
+              Pasto {n1(profile.blocksPerMeal)}
+            </button>
+            <button
+              className={`kind ${target === profile.blocksPerSnack ? 'is-on' : ''}`}
+              onClick={() => setTarget(profile.blocksPerSnack)}
+            >
+              Spuntino {n1(profile.blocksPerSnack)}
+            </button>
+          </div>
+
+          <h1 className="status" aria-live="polite">
+            <span className="status__title">
+              {items.length === 0 ? 'Piatto vuoto.' : status.inZone ? 'In Zona.' : 'Fuori Zona.'}
+            </span>
+            <span className="status__sub">
+              {items.length === 0
+                ? `${profile.name}: ${n1(target)} ${blocchi(target)} da comporre.`
+                : statusLine(status)}
+            </span>
+          </h1>
+
+          <div className="big">
+            <span className="big__num">{n0(totals.kcalMacro)}</span>
+            <span className="big__unit">kcal</span>
+          </div>
+          <SplitChips split={split} empty={items.length === 0} />
+        </div>
       </section>
 
-      <MacroBars status={status} />
-      <CalorieSplit split={split} kcal={totals.kcalMacro} />
+      <MacroTiles status={status} empty={items.length === 0} />
 
       {items.length > 0 && others.length > 0 && (
-        <ul className="others">
+        <div className="others">
           {others.map((p) => {
             const s = evaluate(totals, blocksFor(p), p.tolerance);
             return (
-              <li key={p.id}>
-                <button className="others__btn" onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}>
-                  <strong>{p.name}</strong> <span className="muted">{n1(blocksFor(p))} bl</span>{' '}
-                  <span className={s.inZone ? 'ok' : ''}>{shortStatus(s)}</span>
-                </button>
-              </li>
+              <button
+                key={p.id}
+                className="others__btn"
+                onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}
+              >
+                <span className={`dot ${s.inZone ? 'dot--ok' : 'dot--warn'}`} />
+                <strong>{p.name}</strong>
+                <span className="muted">{n1(blocksFor(p))} bl</span>
+                <span className="others__s">{shortStatus(s)}</span>
+              </button>
             );
           })}
-        </ul>
+        </div>
       )}
 
       {advice.length > 0 && (
-        <section className="advice">
-          <h2 className="h2">Come bilanciare</h2>
+        <section className="section">
+          <h2 className="section__title">
+            Consigli. <span className="section__sub">Tocca per applicare.</span>
+          </h2>
           {advice.map((a) => (
-            <div key={a.macro} className={`advice__item advice__item--${a.macro}`}>
-              <p className="advice__need">
-                {a.direction === 'add' ? 'Mancano' : 'Troppi'}{' '}
-                <strong>
-                  {n1(a.blocks)} {blocchi(a.blocks)}
-                </strong>{' '}
-                {MACRO_OF[a.macro]} <span className="muted">({n1(a.grams)} g)</span>
-              </p>
+            <div key={a.macro} className={`card advice advice--${a.macro}`}>
+              <div className="advice__head">
+                <div>
+                  <p className="advice__macro">{MACRO_LABEL[a.macro]}</p>
+                  <p className="advice__need">
+                    {a.direction === 'add' ? 'Mancano' : 'Troppi'} {n1(a.grams)} g
+                  </p>
+                </div>
+                <p className="advice__big">
+                  {a.direction === 'add' ? '+' : '−'}
+                  {n1(a.blocks)}
+                  <span>bl</span>
+                </p>
+              </div>
               <div className="advice__opts">
                 {a.options.map((o) => (
                   <button key={o.foodId} className="opt" onClick={() => apply(a, o)}>
-                    <span className="opt__main">
+                    <span className="opt__g">
                       {a.direction === 'add' ? '+' : '−'}
-                      {n0(o.grams)} g {o.foodName}
-                      {o.removesItem && <span className="muted"> (tutto)</span>}
+                      {n0(o.grams)} g
                     </span>
-                    <span className="opt__sub">
-                      {o.portionHint && <span>= {o.portionHint}</span>}
+                    <span className="opt__name">
+                      {o.foodName}
+                      {o.portionHint && <small> = {o.portionHint}</small>}
+                      {o.removesItem && <small> (tutto)</small>}
+                    </span>
+                    <span className="opt__after">
                       {o.inZoneAfter ? (
-                        <span className="ok">→ in Zona</span>
+                        <>
+                          <span className="dot dot--ok" />
+                          Zona
+                        </>
                       ) : (
-                        <span className="muted">
-                          poi:{' '}
-                          {MACROS.filter((m) => o.after[m] !== 'ok')
-                            .map((m) => `${MACRO_SHORT[m]} ${o.after[m] === 'low' ? 'basso' : 'alto'}`)
-                            .join(', ')}
-                        </span>
+                        MACROS.filter((m) => o.after[m] !== 'ok')
+                          .map((m) => `${MACRO_SHORT[m]} ${o.after[m] === 'low' ? '↓' : '↑'}`)
+                          .join(' ')
                       )}
                     </span>
                   </button>
                 ))}
                 {a.options.length === 0 && (
-                  <p className="muted">Nessun alimento adatto in archivio per {profile.name}.</p>
+                  <p className="muted small">Nessun alimento adatto in archivio per {profile.name}.</p>
                 )}
               </div>
             </div>
@@ -224,32 +252,49 @@ export function Composer() {
         </section>
       )}
 
-      <section className="plate">
-        <div className="plate__head">
-          <h2 className="h2">Nel piatto</h2>
-          <label className="toggle">
-            <input type="checkbox" checked={game} onChange={(e) => setGame(e.target.checked)} />
-            <span>Gioco</span>
-          </label>
+      <section className="section">
+        <div className="section__row">
+          <h2 className="section__title">Nel piatto.</h2>
+          {items.length > 0 && (
+            <label className="switch">
+              <input type="checkbox" checked={game} onChange={(e) => setGame(e.target.checked)} />
+              <span className="switch__track" />
+              <span>Gioco</span>
+            </label>
+          )}
         </div>
+
+        {items.length === 0 && (
+          <button className="card empty-card" onClick={() => setPicking(true)}>
+            <span className="empty-card__plus">
+              <IconPlus size={22} />
+            </span>
+            <span>
+              <strong>Aggiungi il primo alimento</strong>
+              <small>Cerca, scegli un piatto pronto o scansiona un’etichetta.</small>
+            </span>
+          </button>
+        )}
 
         <ul className="items">
           {items.map((it, i) => {
             const f = foodMap.get(it.foodId);
             if (!f)
               return (
-                <li key={i} className="item">
-                  <span className="muted">Alimento eliminato</span>
-                  <button className="btn btn--ghost" onClick={() => removeAt(i)}>
-                    Togli
-                  </button>
+                <li key={i} className="card item">
+                  <div className="item__top">
+                    <span className="muted">Alimento eliminato</span>
+                    <button className="x" onClick={() => removeAt(i)} aria-label="Togli">
+                      ×
+                    </button>
+                  </div>
                 </li>
               );
             const b = gramsToBlocks(foodMacros(f, it.grams));
             const step = stepFor(it.grams);
-            const sliderMax = Math.max(50, Math.ceil((Math.max(it.grams * 2, (f.portion?.grams ?? 100) * 2)) / 10) * 10);
+            const sliderMax = Math.max(50, Math.ceil(Math.max(it.grams * 2, (f.portion?.grams ?? 100) * 2) / 10) * 10);
             return (
-              <li key={i} className="item">
+              <li key={i} className="card item">
                 <div className="item__top">
                   <span className="item__name">
                     {f.name} <SourceBadge food={f} />
@@ -264,6 +309,7 @@ export function Composer() {
                       −
                     </button>
                     <input
+                      id={`grams-${it.foodId}`}
                       className="grams__in"
                       type="number"
                       inputMode="decimal"
@@ -277,10 +323,19 @@ export function Composer() {
                       +
                     </button>
                   </div>
-                  <span className="item__blocks">
-                    <span className="c-protein">{n1(b.protein)}</span>
-                    <span className="c-carbs">{n1(b.carbs)}</span>
-                    <span className="c-fat">{n1(b.fat)}</span>
+                  <span className="item__blocks" aria-label="Blocchi P, C, G">
+                    <span>
+                      <i className="dot dot--protein" />
+                      {n1(b.protein)}
+                    </span>
+                    <span>
+                      <i className="dot dot--carbs" />
+                      {n1(b.carbs)}
+                    </span>
+                    <span>
+                      <i className="dot dot--fat" />
+                      {n1(b.fat)}
+                    </span>
                   </span>
                 </div>
                 {game && (
@@ -299,23 +354,17 @@ export function Composer() {
             );
           })}
         </ul>
-        {items.length > 0 && <p className="legend muted">Blocchi per alimento: P · C · G</p>}
 
-        <div className="plate__actions">
-          <button className="btn btn--primary" onClick={() => setPicking(true)}>
-            + Aggiungi alimento
-          </button>
-          {items.length > 0 && (
-            <>
-              <button className="btn" onClick={() => setSaving('')}>
-                Salva come piatto
-              </button>
-              <button className="btn btn--ghost" onClick={() => setItems(() => [])}>
-                Svuota
-              </button>
-            </>
-          )}
-        </div>
+        {items.length > 0 && (
+          <div className="actions">
+            <button className="pill" onClick={() => setSaving('')}>
+              Salva come piatto
+            </button>
+            <button className="pill pill--ghost" onClick={() => setItems(() => [])}>
+              Svuota
+            </button>
+          </div>
+        )}
 
         {saving !== null && (
           <form
@@ -326,16 +375,17 @@ export function Composer() {
             }}
           >
             <input
+              id="dish-name"
               autoFocus
               className="search"
               placeholder="Nome del piatto, es. Wrap kebab"
               value={saving}
               onChange={(e) => setSaving(e.target.value)}
             />
-            <button className="btn btn--primary" type="submit" disabled={!saving.trim()}>
+            <button className="pill pill--solid" type="submit" disabled={!saving.trim()}>
               Salva
             </button>
-            <button className="btn btn--ghost" type="button" onClick={() => setSaving(null)}>
+            <button className="pill pill--ghost" type="button" onClick={() => setSaving(null)}>
               Annulla
             </button>
           </form>
@@ -343,8 +393,12 @@ export function Composer() {
       </section>
 
       {totals.missing.length > 0 && (
-        <p className="muted">{totals.missing.length} alimenti non più in archivio, ignorati nei calcoli.</p>
+        <p className="muted small">{totals.missing.length} alimenti non più in archivio, ignorati nei calcoli.</p>
       )}
+
+      <button className="fab" onClick={() => setPicking(true)} aria-label="Aggiungi alimento">
+        <IconPlus size={26} />
+      </button>
 
       {picking && (
         <FoodPicker

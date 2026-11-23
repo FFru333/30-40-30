@@ -164,6 +164,7 @@ export function balance(input: BalanceInput): Advice[] {
       for (const f of pool) {
         const minPurity = inMeal.has(f.id) ? 0.4 : 0.55;
         if (f.ingredients && !inMeal.has(f.id)) continue; // i piatti composti non sono "riempitivi"
+        if (f.suggest === false && !inMeal.has(f.id)) continue; // zucchero, alcol, salse
         if (macroPer100(f, m) >= 2 && purity(f, m) >= minPurity) candidates.set(f.id, f);
       }
       for (const f of candidates.values()) {

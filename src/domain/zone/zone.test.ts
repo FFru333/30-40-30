@@ -311,3 +311,11 @@ describe('ricerca e archivio allargato', async () => {
     expect(byId.get('tacos-fagioli')?.diet).toBe('vegetariano');
   });
 });
+
+describe('consigli sensati', () => {
+  it('non propone zucchero, miele o alcol per i carboidrati', () => {
+    const advice = balance({ items: [{ foodId: 'planted-kebab', grams: 125 }], lookup, targetBlocks: 4, tolerance: tol, pool: SEED_FOODS });
+    const ids = advice.flatMap((a) => a.options.map((o) => o.foodId));
+    for (const bad of ['zucchero', 'miele', 'birra', 'vino', 'marmellata']) expect(ids).not.toContain(bad);
+  });
+});

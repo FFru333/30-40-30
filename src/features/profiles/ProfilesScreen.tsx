@@ -191,7 +191,7 @@ function BackupSection() {
 
   return (
     <section className="card">
-      <h2 className="h2">Dati e backup</h2>
+      <h2 className="card__title">Dati e backup.</h2>
       <p className="small">
         I dati stanno solo su questo telefono. Per passarli all’altro telefono: esporta qui, importa di là.
         L’import sostituisce tutto.
@@ -266,7 +266,10 @@ export function ProfilesScreen() {
   if (!profiles) return <div className="loading">Carico…</div>;
   return (
     <div className="screen">
-      <h1 className="h1">Profili</h1>
+      <header className="head">
+        <h1 className="head__title">Profili.</h1>
+        <p className="head__sub">Blocchi, tolleranze, backup.</p>
+      </header>
       {profiles.map((p) => (
         <ProfileCard key={p.id} p={p} />
       ))}

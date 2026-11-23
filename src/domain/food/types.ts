@@ -43,6 +43,8 @@ export interface Food {
   sourceNote?: string;
   /** Presente se l'alimento è un piatto composto da altri alimenti. */
   ingredients?: Ingredient[];
+  /** false: non proporlo nei consigli di bilanciamento (zucchero, alcol, salse…). */
+  suggest?: boolean;
   /** Alimento dell'archivio iniziale (non creato dall'utente). */
   seed?: boolean;
 }

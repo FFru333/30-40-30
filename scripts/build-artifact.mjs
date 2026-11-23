@@ -17,6 +17,8 @@ const icon = readFileSync('public/icon.svg', 'utf8');
 
 const html = `<title>Zone Planner</title>
 <meta name="description" content="Pasti a Zona per due: blocchi, bilanciamento, archivio alimenti.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&display=swap">
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent(icon)}">
 <style>${style}</style>
 <div id="root"></div>

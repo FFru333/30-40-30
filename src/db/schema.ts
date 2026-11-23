@@ -36,6 +36,13 @@ export class ZoneDB extends Dexie {
           else if (seed.aliases && !cur.aliases) await table.update(seed.id, { aliases: seed.aliases });
         }
       });
+    // v3: alcuni alimenti (zucchero, alcol, salse) non vengono più proposti nei consigli.
+    this.version(3)
+      .stores({ foods: 'id, name, diet, source', profiles: 'id', drafts: 'id' })
+      .upgrade(async (tx) => {
+        const table = tx.table<Food, string>('foods');
+        for (const seed of SEED_FOODS) if (seed.suggest === false) await table.update(seed.id, { suggest: false });
+      });
     this.on('populate', (tx) => {
       tx.table('foods').bulkAdd(SEED_FOODS);
       tx.table('profiles').bulkAdd(DEFAULT_PROFILES);

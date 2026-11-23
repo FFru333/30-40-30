@@ -435,6 +435,14 @@ export const ALIASES: Record<string, string[]> = {
   vino: ['Wein'],
 };
 
+/** Da non proporre come correzione: si possono aggiungere, ma non sono un consiglio sensato. */
+const NO_SUGGEST = new Set([
+  'zucchero', 'miele', 'marmellata', 'crema-nocciole', 'cioccolato-70', 'biscotti', 'croissant', 'patatine',
+  'nachos', 'birra', 'vino', 'succo-arancia', 'ketchup', 'maionese', 'senape', 'salsa-soia', 'salsa-taco',
+  'pesto', 'concentrato', 'uvetta', 'datteri', 'aglio', 'limone', 'corn-flakes', 'granola', 'burro', 'mascarpone',
+  'panna', 'salame', 'mortadella', 'pancetta', 'wurstel', 'salsiccia', 'whey', 'olive', 'jalapenos', 'guacamole',
+]);
+
 const BASE_FOODS: Food[] = [
   PLANTED_KEBAB,
   ...ROWS.map(([id, name, kcal, protein, carbs, fiber, fat, diet, portion]): Food => ({
@@ -448,7 +456,9 @@ const BASE_FOODS: Food[] = [
     sourceNote: 'Valore medio tipico: verificare in etichetta',
     seed: true,
   })),
-].map((f) => (ALIASES[f.id] ? { ...f, aliases: ALIASES[f.id] } : f));
+]
+  .map((f) => (ALIASES[f.id] ? { ...f, aliases: ALIASES[f.id] } : f))
+  .map((f) => (NO_SUGGEST.has(f.id) ? { ...f, suggest: false } : f));
 
 const baseById = new Map(BASE_FOODS.map((f) => [f.id, f]));
 

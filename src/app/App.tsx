@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
+import { IconList, IconPeople, IconPlate } from '../ui/icons';
 import { Composer } from '../features/composer/Composer';
 import { FoodsScreen } from '../features/foods/FoodsScreen';
 import { ProfilesScreen } from '../features/profiles/ProfilesScreen';
 
 const ROUTES = [
-  { path: 'pasto', label: 'Pasto' },
-  { path: 'alimenti', label: 'Alimenti' },
-  { path: 'profili', label: 'Profili' },
+  { path: 'pasto', label: 'Pasto', Icon: IconPlate },
+  { path: 'alimenti', label: 'Alimenti', Icon: IconList },
+  { path: 'profili', label: 'Profili', Icon: IconPeople },
 ] as const;
 type Route = (typeof ROUTES)[number]['path'];
 
@@ -36,7 +37,8 @@ export function App() {
       <nav className="tabs" aria-label="Sezioni">
         {ROUTES.map((r) => (
           <a key={r.path} href={`#${r.path}`} className={`tabs__a ${route === r.path ? 'is-on' : ''}`} aria-current={route === r.path ? 'page' : undefined}>
-            {r.label}
+            <r.Icon />
+            <span>{r.label}</span>
           </a>
         ))}
       </nav>
