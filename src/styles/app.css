@@ -931,3 +931,20 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+.paste {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font: 13px/1.4 ui-monospace, Menlo, monospace;
+}
+
+.confirm {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+}

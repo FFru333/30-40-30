@@ -35,7 +35,7 @@ export function App() {
       </main>
       <nav className="tabs" aria-label="Sezioni">
         {ROUTES.map((r) => (
-          <a key={r.path} href={`#/${r.path}`} className={`tabs__a ${route === r.path ? 'is-on' : ''}`} aria-current={route === r.path ? 'page' : undefined}>
+          <a key={r.path} href={`#${r.path}`} className={`tabs__a ${route === r.path ? 'is-on' : ''}`} aria-current={route === r.path ? 'page' : undefined}>
             {r.label}
           </a>
         ))}

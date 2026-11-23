@@ -3,11 +3,15 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // base relativa: funziona su GitHub Pages (/<repo>/) e in locale.
+// VITE_ARTIFACT=1: build senza service worker, impacchettata in un solo file da scripts/build-artifact.mjs.
+const artifact = !!process.env.VITE_ARTIFACT;
+
 export default defineConfig({
   base: './',
+  build: artifact ? { outDir: 'dist-artifact', emptyOutDir: true } : undefined,
   plugins: [
     react(),
-    VitePWA({
+    !artifact && VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],

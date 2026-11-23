@@ -40,6 +40,7 @@ export function FoodForm({
   const [note, setNote] = useState(initial.sourceNote ?? '');
   const [pLabel, setPLabel] = useState(initial.portion?.label ?? '');
   const [pGrams, setPGrams] = useState(initial.portion ? String(initial.portion.grams) : '');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const parsed = Object.fromEntries(NUM_FIELDS.map(({ key }) => [key, toNum(nums[key])])) as Record<NumKey, number>;
   const invalid = NUM_FIELDS.filter(({ key }) => Number.isNaN(parsed[key])).map((f) => f.label);
@@ -164,11 +165,9 @@ export function FoodForm({
           <button
             className="btn btn--danger"
             type="button"
-            onClick={() => {
-              if (confirm(`Eliminare “${initial.name}”?`)) onDelete();
-            }}
+            onClick={() => (confirmDelete ? onDelete() : setConfirmDelete(true))}
           >
-            Elimina
+            {confirmDelete ? 'Conferma eliminazione' : 'Elimina'}
           </button>
         )}
       </div>

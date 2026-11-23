@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../db/schema';
-import { exportBackup, parseBackup, restoreBackup } from '../../db/backup';
+import { exportBackup, parseBackup, restoreBackup, type Backup } from '../../db/backup';
 import { SEED_FOODS } from '../../data/seed-foods';
 import { DIET_LABEL, dailyBlocks, type Diet, type Profile } from '../../domain/profile/types';
 import { targetGrams } from '../../domain/zone/blocks';
@@ -129,47 +129,57 @@ function ProfileCard({ p }: { p: Profile }) {
   );
 }
 
-function Backup() {
+function BackupSection() {
   const [msg, setMsg] = useState<string | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
+  const [pending, setPending] = useState<Backup | null>(null);
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState('');
   useEffect(() => {
     navigator.storage?.persisted?.().then(setPersisted).catch(() => setPersisted(null));
   }, []);
 
   const doExport = async () => {
     const data = await exportBackup(db);
+    const text = JSON.stringify(data);
     const name = `zone-planner-${data.exportedAt.slice(0, 10)}.json`;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const file = new File([blob], name, { type: 'application/json' });
-    // Su telefono: condividi (AirDrop, WhatsApp, mail). Altrimenti scarica.
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
+    const file = new File([text], name, { type: 'application/json' });
+    // Su telefono: condividi (AirDrop, WhatsApp, mail).
+    try {
+      if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: 'Backup Zone Planner' });
         setMsg('Backup condiviso.');
         return;
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') return;
       }
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return;
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMsg('Backup scaricato.');
+    // Altrimenti copia il testo: incollalo in una nota o in un messaggio.
+    try {
+      await navigator.clipboard.writeText(text);
+      setMsg('Backup copiato negli appunti. Incollalo in una nota o mandalo all’altro telefono.');
+    } catch {
+      setMsg('Non riesco né a condividere né a copiare il backup da qui.');
+    }
   };
 
-  const doImport = async (file: File) => {
+  const readBackup = (text: string) => {
     try {
-      const b = parseBackup(JSON.parse(await file.text()));
-      if (!confirm(`Sostituire tutti i dati con il backup (${b.foods.length} alimenti, ${b.profiles.length} profili)?`))
-        return;
-      await restoreBackup(db, b);
-      setMsg('Backup importato.');
+      setPending(parseBackup(JSON.parse(text)));
+      setMsg(null);
     } catch (e) {
-      setMsg(e instanceof SyntaxError ? 'Il file non è JSON valido.' : (e as Error).message);
+      setPending(null);
+      setMsg(e instanceof SyntaxError ? 'Il testo non è un backup valido (JSON).' : (e as Error).message);
     }
+  };
+
+  const confirmImport = async () => {
+    if (!pending) return;
+    await restoreBackup(db, pending);
+    setPending(null);
+    setPasting(false);
+    setPasted('');
+    setMsg('Backup importato.');
   };
 
   const restoreSeed = async () => {
@@ -189,29 +199,63 @@ function Backup() {
       <p className="small muted">
         {persisted === true
           ? 'Archiviazione persistente attiva.'
-          : 'Archiviazione non garantita: su iPhone aggiungi l’app alla schermata Home e fai backup regolari.'}
+          : 'Archiviazione non garantita: fai backup regolari.'}
       </p>
       <div className="form__actions">
         <button className="btn btn--primary" onClick={doExport}>
           Esporta backup
         </button>
         <label className="btn">
-          Importa backup
+          Importa da file
           <input
+            id="backup-file"
             type="file"
-            accept="application/json,.json"
+            accept="application/json,.json,text/plain"
             hidden
-            onChange={(e) => {
+            onChange={async (e) => {
               const f = e.target.files?.[0];
-              if (f) void doImport(f);
               e.target.value = '';
+              if (f) readBackup(await f.text());
             }}
           />
         </label>
+        <button className="btn" onClick={() => setPasting((x) => !x)}>
+          Incolla backup
+        </button>
         <button className="btn btn--ghost" onClick={restoreSeed}>
           Ripristina alimenti iniziali
         </button>
       </div>
+      {pasting && (
+        <div className="inline-form">
+          <textarea
+            id="backup-paste"
+            className="paste"
+            placeholder="Incolla qui il testo del backup"
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+          />
+          <button className="btn" disabled={!pasted.trim()} onClick={() => readBackup(pasted)}>
+            Leggi
+          </button>
+        </div>
+      )}
+      {pending && (
+        <div className="confirm">
+          <p className="small">
+            Sostituire tutti i dati con questo backup? {pending.foods.length} alimenti, {pending.profiles.length} profili
+            {pending.exportedAt && `, del ${new Date(pending.exportedAt).toLocaleString('it-IT')}`}.
+          </p>
+          <div className="form__actions">
+            <button className="btn btn--primary" onClick={confirmImport}>
+              Sostituisci i dati
+            </button>
+            <button className="btn btn--ghost" onClick={() => setPending(null)}>
+              Annulla
+            </button>
+          </div>
+        </div>
+      )}
       {msg && <p className="note">{msg}</p>}
     </section>
   );
@@ -226,7 +270,7 @@ export function ProfilesScreen() {
       {profiles.map((p) => (
         <ProfileCard key={p.id} p={p} />
       ))}
-      <Backup />
+      <BackupSection />
       <p className="muted small">
         Blocchi di partenza (4 e 3 per pasto) da correggere: dipendono da massa magra, attività e obiettivo.
       </p>
