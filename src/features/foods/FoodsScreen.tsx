@@ -3,11 +3,11 @@ import { db } from '../../db/schema';
 import type { Food, Source } from '../../domain/food/types';
 import { netCarbs } from '../../domain/zone/blocks';
 import { newId, useFoods } from '../../app/data';
+import { searchFoods } from '../../domain/food/search';
 import { SourceBadge } from '../../ui/SourceBadge';
 import { n0, n1 } from '../../ui/format';
 import { FoodForm } from './FoodForm';
 
-const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 const BLANK: Food = {
   id: '',
@@ -27,11 +27,8 @@ export function FoodsScreen() {
   const [editing, setEditing] = useState<Food | null>(null);
 
   const list = useMemo(() => {
-    const words = norm(q).split(/\s+/).filter(Boolean);
-    return (foods ?? []).filter(
-      (f) =>
-        words.every((w) => norm(f.name).includes(w)) &&
-        (filter === 'tutti' || (filter === 'piatti' ? !!f.ingredients : f.source === filter)),
+    return searchFoods(foods ?? [], q).filter(
+      (f) => filter === 'tutti' || (filter === 'piatti' ? !!f.ingredients : f.source === filter),
     );
   }, [foods, q, filter]);
 

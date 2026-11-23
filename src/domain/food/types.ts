@@ -31,6 +31,8 @@ export interface Ingredient {
 export interface Food {
   id: string;
   name: string;
+  /** Altri nomi per la ricerca (es. tedesco, sinonimi). */
+  aliases?: string[];
   /** Valori per 100 g. */
   per100: Nutrients;
   carbBasis: CarbBasis;

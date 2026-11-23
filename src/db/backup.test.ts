@@ -33,3 +33,21 @@ describe('backup', () => {
     ).toThrow(/Alimento n. 1/);
   });
 });
+
+describe('aggiornamento archivio', () => {
+  it('un database v1 riceve i nuovi alimenti e i sinonimi, senza perdere le modifiche', async () => {
+    const Dexie = (await import('dexie')).default;
+    const old = new Dexie('t-upgrade');
+    old.version(1).stores({ foods: 'id, name, diet, source', profiles: 'id', drafts: 'id' });
+    await old.open();
+    await old.table('foods').add({ ...SEED_FOODS.find((f) => f.id === 'pollo')!, aliases: undefined, per100: { kcal: 1, protein: 99, carbs: 0, fiber: 0, fat: 0 } });
+    old.close();
+
+    const db = new ZoneDB('t-upgrade');
+    const pollo = await db.foods.get('pollo');
+    expect(pollo?.per100.protein).toBe(99);
+    expect(pollo?.aliases).toContain('Hähnchenbrust');
+    expect(await db.foods.get('taco-shells')).toBeDefined();
+    db.close();
+  });
+});

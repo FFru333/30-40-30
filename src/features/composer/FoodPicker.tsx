@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Food } from '../../domain/food/types';
 import type { Profile } from '../../domain/profile/types';
 import { netCarbs } from '../../domain/zone/blocks';
-import { whyNotAllowed } from '../../app/data';
+import { newId, whyNotAllowed } from '../../app/data';
+import { db } from '../../db/schema';
+import { FoodForm } from '../foods/FoodForm';
+import { searchFoods } from '../../domain/food/search';
 import { SourceBadge } from '../../ui/SourceBadge';
 import { n1 } from '../../ui/format';
 
-const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 export function FoodPicker({
   foods,
@@ -20,16 +22,42 @@ export function FoodPicker({
   onClose: () => void;
 }) {
   const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
 
   const list = useMemo(() => {
-    const words = norm(q).split(/\s+/).filter(Boolean);
-    return foods
-      .filter((f) => words.every((w) => norm(f.name).includes(w)))
+    return searchFoods(foods, q)
       .map((f) => ({ f, why: whyNotAllowed(f, profile) }))
       .sort((a, b) => Number(!!a.why) - Number(!!b.why));
   }, [foods, q, profile]);
+
+  if (creating) {
+    return (
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Nuovo alimento">
+        <div className="sheet__scroll">
+          <h1 className="h1">Nuovo alimento</h1>
+          <p className="muted small">Copia i valori per 100 g dall’etichetta. Verrà aggiunto anche al piatto.</p>
+          <FoodForm
+            initial={{
+              id: '',
+              name: q.trim().replace(/^./, (c) => c.toUpperCase()),
+              per100: { kcal: 0, protein: 0, carbs: 0, fiber: 0, fat: 0 },
+              carbBasis: 'eu',
+              diet: 'vegano',
+              source: 'etichetta',
+            }}
+            onCancel={() => setCreating(false)}
+            onSave={async (f) => {
+              const food = { ...f, id: newId('food') };
+              await db.foods.put(food);
+              onPick(food);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="sheet" role="dialog" aria-modal="true" aria-label="Aggiungi alimento">
@@ -73,7 +101,15 @@ export function FoodPicker({
             </button>
           </li>
         ))}
-        {list.length === 0 && <li className="empty">Nessun alimento. Aggiungilo da “Alimenti”.</li>}
+        {list.length === 0 && <li className="empty">Nessun alimento trovato per “{q.trim()}”.</li>}
+        {q.trim() && (
+          <li>
+            <button className="pick pick--new" onClick={() => setCreating(true)}>
+              <span className="pick__name">+ Crea “{q.trim()}”</span>
+              <span className="pick__meta muted">Inserisci i valori dall’etichetta</span>
+            </button>
+          </li>
+        )}
       </ul>
     </div>
   );

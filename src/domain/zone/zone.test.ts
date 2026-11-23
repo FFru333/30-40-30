@@ -274,11 +274,40 @@ describe('archivio iniziale', () => {
   it('id unici e valori plausibili', () => {
     const ids = new Set(SEED_FOODS.map((f) => f.id));
     expect(ids.size).toBe(SEED_FOODS.length);
-    expect(SEED_FOODS.length).toBeGreaterThanOrEqual(60);
+    expect(SEED_FOODS.length).toBeGreaterThanOrEqual(200);
     for (const f of SEED_FOODS) {
       const { protein, carbs, fiber, fat } = f.per100;
       expect(protein + carbs + fiber + fat, f.id).toBeLessThanOrEqual(100.5);
       expect(f.source).toBeDefined();
     }
+  });
+});
+
+describe('ricerca e archivio allargato', async () => {
+  const { searchFoods } = await import('../food/search');
+  const { ALIASES } = await import('../../data/seed-foods');
+
+  it('"tacos" trova gusci, tortillas di mais e piatti pronti', () => {
+    const ids = searchFoods(SEED_FOODS, 'tacos').map((f) => f.id);
+    expect(ids).toEqual(expect.arrayContaining(['taco-shells', 'tortilla-mais', 'tacos-manzo', 'tacos-pesce', 'tacos-fagioli']));
+  });
+
+  it('trova per nome tedesco, senza accenti e maiuscole', () => {
+    expect(searchFoods(SEED_FOODS, 'hahnchenbrust').map((f) => f.id)).toContain('pollo');
+    expect(searchFoods(SEED_FOODS, 'KICHERERBSEN').map((f) => f.id)).toContain('ceci');
+  });
+
+  it('il nome conta più dei sinonimi', () => {
+    expect(searchFoods(SEED_FOODS, 'riso')[0]?.name).toMatch(/^Riso/);
+  });
+
+  it('ogni sinonimo punta a un alimento esistente', () => {
+    for (const id of Object.keys(ALIASES)) expect(byId.has(id), id).toBe(true);
+  });
+
+  it('tacos di pesce: piatto pescetariano, adatto a Marina', () => {
+    expect(byId.get('tacos-pesce')?.diet).toBe('pesce');
+    expect(byId.get('tacos-manzo')?.diet).toBe('carne');
+    expect(byId.get('tacos-fagioli')?.diet).toBe('vegetariano');
   });
 });

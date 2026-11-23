@@ -23,7 +23,7 @@ src/
   domain/zone/      blocchi, totali pasto, stato Zona, suggerimenti di bilanciamento (+ test)
   domain/food/      tipi alimento, piatti composti
   domain/profile/   profili, diete, blocchi giornalieri
-  data/             archivio iniziale (~77 alimenti)
+  data/             archivio iniziale (~220 alimenti, sinonimi DE, piatti pronti)
   db/               IndexedDB (Dexie), backup JSON (+ test)
   features/         composer (Pasto), foods (Alimenti), profiles (Profili e backup)
   ui/               barre macro, ripartizione calorica, badge fonte, formattazione it-IT

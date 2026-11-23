@@ -948,3 +948,13 @@ button {
   border: 1px solid var(--ink);
   border-radius: var(--radius);
 }
+
+.sheet__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px var(--gutter) calc(env(safe-area-inset-bottom) + 24px);
+}
+
+.pick--new .pick__name {
+  font-weight: 600;
+}

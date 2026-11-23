@@ -23,6 +23,19 @@ export class ZoneDB extends Dexie {
       profiles: 'id',
       drafts: 'id',
     });
+    // v2: archivio allargato (~200 alimenti, sinonimi, tacos). Aggiunge ciò che manca
+    // e i sinonimi agli alimenti iniziali, senza toccare i valori che avete modificato.
+    this.version(2)
+      .stores({ foods: 'id, name, diet, source', profiles: 'id', drafts: 'id' })
+      .upgrade(async (tx) => {
+        const table = tx.table<Food, string>('foods');
+        const existing = new Map((await table.toArray()).map((f) => [f.id, f]));
+        for (const seed of SEED_FOODS) {
+          const cur = existing.get(seed.id);
+          if (!cur) await table.add(seed);
+          else if (seed.aliases && !cur.aliases) await table.update(seed.id, { aliases: seed.aliases });
+        }
+      });
     this.on('populate', (tx) => {
       tx.table('foods').bulkAdd(SEED_FOODS);
       tx.table('profiles').bulkAdd(DEFAULT_PROFILES);
