@@ -6,21 +6,21 @@ import { buildComposite } from '../../domain/food/composite';
 import { MACROS, gramsToBlocks } from '../../domain/zone/blocks';
 import { foodMacros, kcalSplit, mealTotals } from '../../domain/zone/meal';
 import { evaluate, type ZoneStatus } from '../../domain/zone/status';
-import { balance, type Advice, type Suggestion } from '../../domain/zone/balance';
+import { plans, type Plan } from '../../domain/zone/plan';
 import { allowedFoods, newId, useFoodMap, useFoods, useProfiles } from '../../app/data';
-import { MacroTiles, SplitChips } from '../../ui/MacroBars';
+import { MacroStats, Ring } from '../../ui/Ring';
 import { IconPlus } from '../../ui/icons';
 import { SourceBadge } from '../../ui/SourceBadge';
-import { MACRO_LABEL, MACRO_OF, MACRO_SHORT, blocchi, n0, n1 } from '../../ui/format';
+import { MACRO_LABEL, MACRO_OF, blocchi, n0, n1 } from '../../ui/format';
 import { FoodPicker } from './FoodPicker';
 
 function statusLine(s: ZoneStatus): string {
   const w = s.worst;
-  if (!w) return 'Tutti e tre i macro dentro la tolleranza.';
+  if (!w) return 'Proteine, carboidrati e grassi sono in equilibrio.';
   const b = Math.abs(w.deltaBlocks);
   return w.state === 'low'
     ? `Mancano ${n1(b)} ${blocchi(b)} ${MACRO_OF[w.macro]}.`
-    : `${n1(b)} ${blocchi(b)} ${MACRO_OF[w.macro]} di troppo.`;
+    : `${n1(b)} ${blocchi(b)} ${MACRO_OF[w.macro]} in più: adegua il resto.`;
 }
 
 function shortStatus(s: ZoneStatus): string {
@@ -33,9 +33,13 @@ function shortStatus(s: ZoneStatus): string {
     .join(' · ');
 }
 
-function stepFor(g: number) {
-  return g < 20 ? 1 : 5;
-}
+const stepFor = (g: number) => (g < 20 ? 1 : 5);
+
+const PLAN_TITLE: Record<Plan['kind'], string> = {
+  fill: 'Completa il piatto',
+  adapt: 'Tieni tutto, adegua il resto',
+  fit: 'Resta nei tuoi blocchi',
+};
 
 export function Composer() {
   const foods = useFoods();
@@ -46,6 +50,7 @@ export function Composer() {
   const [picking, setPicking] = useState(false);
   const [game, setGame] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
+  const [exclude, setExclude] = useState<Set<string>>(() => new Set());
 
   // Carica la bozza una volta, poi la salva con un piccolo ritardo.
   useEffect(() => {
@@ -58,21 +63,27 @@ export function Composer() {
     saveTimer.current = window.setTimeout(() => void db.drafts.put(draft), 250);
   }, [draft]);
 
-  const profile: Profile | undefined =
-    profiles?.find((p) => p.id === draft?.activeProfileId) ?? profiles?.[0];
-
-  const lookup = (id: string) => foodMap.get(id);
+  const profile: Profile | undefined = profiles?.find((p) => p.id === draft?.activeProfileId) ?? profiles?.[0];
   const items = draft?.items ?? [];
+  const lookup = (id: string) => foodMap.get(id);
   const totals = useMemo(() => mealTotals(items, lookup), [items, foodMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const blocksFor = (p: Profile) => draft?.blocksByProfile[p.id] ?? p.blocksPerMeal;
+  const target = profile ? blocksFor(profile) : 0;
+  const pool = useMemo(() => (foods && profile ? allowedFoods(foods, profile) : []), [foods, profile]);
+  const planList = useMemo(
+    () =>
+      profile && items.length
+        ? plans({ items, lookup, targetBlocks: target, tolerance: profile.tolerance, pool, exclude })
+        : [],
+    [items, foodMap, target, profile, pool, exclude], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   if (!foods || !profiles || !draft || !profile) return <div className="loading">Carico…</div>;
 
-  const blocksFor = (p: Profile) => draft.blocksByProfile[p.id] ?? p.blocksPerMeal;
-  const target = blocksFor(profile);
   const status = evaluate(totals, target, profile.tolerance);
   const split = kcalSplit(totals);
-  const pool = allowedFoods(foods, profile);
-  const advice = items.length ? balance({ items, lookup, targetBlocks: target, tolerance: profile.tolerance, pool }) : [];
+  const empty = items.length === 0;
   const others = profiles.filter((p) => p.id !== profile.id);
 
   const update = (fn: (d: Draft) => Draft) => setDraft((d) => (d ? fn(d) : d));
@@ -81,10 +92,10 @@ export function Composer() {
     setItems((xs) => xs.map((x, i) => (i === idx ? { ...x, grams: Math.max(0, Math.round(g * 10) / 10) } : x)));
   const removeAt = (idx: number) => setItems((xs) => xs.filter((_, i) => i !== idx));
   const setTarget = (b: number) =>
-    update((d) => ({ ...d, blocksByProfile: { ...d.blocksByProfile, [profile.id]: Math.min(12, Math.max(0.5, b)) } }));
+    update((d) => ({ ...d, blocksByProfile: { ...d.blocksByProfile, [profile.id]: Math.min(20, Math.max(0.5, b)) } }));
 
-  const add = (f: Food, grams?: number) => {
-    const g = grams ?? f.portion?.grams ?? 100;
+  const add = (f: Food) => {
+    const g = f.portion?.grams ?? 100;
     setItems((xs) => {
       const i = xs.findIndex((x) => x.foodId === f.id);
       if (i >= 0) return xs.map((x, j) => (j === i ? { ...x, grams: x.grams + g } : x));
@@ -92,27 +103,23 @@ export function Composer() {
     });
   };
 
-  const apply = (a: Advice, s: Suggestion) => {
-    const delta = a.direction === 'add' ? s.grams : -s.grams;
-    setItems((xs) => {
-      const i = xs.findIndex((x) => x.foodId === s.foodId);
-      if (i < 0) return delta > 0 ? [...xs, { foodId: s.foodId, grams: delta }] : xs;
-      const g = xs[i]!.grams + delta;
-      return g <= 0.0001 ? xs.filter((_, j) => j !== i) : xs.map((x, j) => (j === i ? { ...x, grams: g } : x));
-    });
+  const applyPlan = (p: Plan) => {
+    update((d) => ({
+      ...d,
+      items: p.items.map((x) => ({ ...x, grams: Math.round(x.grams * 10) / 10 })),
+      blocksByProfile: { ...d.blocksByProfile, [profile.id]: p.targetBlocks },
+    }));
+    setExclude(new Set());
   };
 
   const saveDish = async (name: string) => {
-    const dish = buildComposite(newId('piatto'), name.trim(), items, lookup);
-    await db.foods.add(dish);
+    await db.foods.add(buildComposite(newId('piatto'), name.trim(), items, lookup));
     setSaving(null);
   };
 
-  const heroState = items.length === 0 ? 'empty' : status.inZone ? 'in' : 'out';
-
   return (
     <div className="composer">
-      <section className={`hero hero--${heroState}`}>
+      <section className="hero">
         <div className="hero__inner">
           <div className="hero__bar">
             <div className="glass-seg" role="tablist" aria-label="Profilo">
@@ -140,141 +147,61 @@ export function Composer() {
               </button>
             </div>
           </div>
-
           <div className="hero__kind">
             <button
               className={`kind ${target === profile.blocksPerMeal ? 'is-on' : ''}`}
               onClick={() => setTarget(profile.blocksPerMeal)}
             >
-              Pasto {n1(profile.blocksPerMeal)}
+              Pasto · {n1(profile.blocksPerMeal)}
             </button>
             <button
               className={`kind ${target === profile.blocksPerSnack ? 'is-on' : ''}`}
               onClick={() => setTarget(profile.blocksPerSnack)}
             >
-              Spuntino {n1(profile.blocksPerSnack)}
+              Spuntino · {n1(profile.blocksPerSnack)}
+            </button>
+            <button className="hero__add" onClick={() => setPicking(true)}>
+              <IconPlus size={18} /> Aggiungi
             </button>
           </div>
 
-          <h1 className="status" aria-live="polite">
-            <span className="status__title">
-              {items.length === 0 ? 'Piatto vuoto.' : status.inZone ? 'In Zona.' : 'Fuori Zona.'}
-            </span>
-            <span className="status__sub">
-              {items.length === 0
-                ? `${profile.name}: ${n1(target)} ${blocchi(target)} da comporre.`
-                : statusLine(status)}
-            </span>
-          </h1>
+          <Ring split={split} kcal={totals.kcalMacro} empty={empty} inZone={status.inZone} targetBlocks={target} />
+          <p className="hero__line" aria-live="polite">
+            {empty ? `Aggiungi alimenti: l’anello mostra la ripartizione rispetto a 30/40/30.` : statusLine(status)}
+          </p>
+          <MacroStats status={status} split={split} empty={empty} />
 
-          <div className="big">
-            <span className="big__num">{n0(totals.kcalMacro)}</span>
-            <span className="big__unit">kcal</span>
-          </div>
-          <SplitChips split={split} empty={items.length === 0} />
+          {!empty && others.length > 0 && (
+            <div className="others">
+              {others.map((p) => {
+                const s = evaluate(totals, blocksFor(p), p.tolerance);
+                return (
+                  <button key={p.id} className="others__btn" onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}>
+                    <span className={`dot ${s.inZone ? 'dot--ok' : 'dot--warn'}`} />
+                    <strong>{p.name}</strong>
+                    <span className="muted">{n1(blocksFor(p))} bl</span>
+                    <span className="others__s">{shortStatus(s)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 
-      <MacroTiles status={status} empty={items.length === 0} />
-
-      {items.length > 0 && others.length > 0 && (
-        <div className="others">
-          {others.map((p) => {
-            const s = evaluate(totals, blocksFor(p), p.tolerance);
-            return (
-              <button
-                key={p.id}
-                className="others__btn"
-                onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}
-              >
-                <span className={`dot ${s.inZone ? 'dot--ok' : 'dot--warn'}`} />
-                <strong>{p.name}</strong>
-                <span className="muted">{n1(blocksFor(p))} bl</span>
-                <span className="others__s">{shortStatus(s)}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {advice.length > 0 && (
-        <section className="section">
-          <h2 className="section__title">
-            Consigli. <span className="section__sub">Tocca per applicare.</span>
-          </h2>
-          {advice.map((a) => (
-            <div key={a.macro} className={`card advice advice--${a.macro}`}>
-              <div className="advice__head">
-                <div>
-                  <p className="advice__macro">{MACRO_LABEL[a.macro]}</p>
-                  <p className="advice__need">
-                    {a.direction === 'add' ? 'Mancano' : 'Troppi'} {n1(a.grams)} g
-                  </p>
-                </div>
-                <p className="advice__big">
-                  {a.direction === 'add' ? '+' : '−'}
-                  {n1(a.blocks)}
-                  <span>bl</span>
-                </p>
-              </div>
-              <div className="advice__opts">
-                {a.options.map((o) => (
-                  <button key={o.foodId} className="opt" onClick={() => apply(a, o)}>
-                    <span className="opt__g">
-                      {a.direction === 'add' ? '+' : '−'}
-                      {n0(o.grams)} g
-                    </span>
-                    <span className="opt__name">
-                      {o.foodName}
-                      {o.portionHint && <small> = {o.portionHint}</small>}
-                      {o.removesItem && <small> (tutto)</small>}
-                    </span>
-                    <span className="opt__after">
-                      {o.inZoneAfter ? (
-                        <>
-                          <span className="dot dot--ok" />
-                          Zona
-                        </>
-                      ) : (
-                        MACROS.filter((m) => o.after[m] !== 'ok')
-                          .map((m) => `${MACRO_SHORT[m]} ${o.after[m] === 'low' ? '↓' : '↑'}`)
-                          .join(' ')
-                      )}
-                    </span>
-                  </button>
-                ))}
-                {a.options.length === 0 && (
-                  <p className="muted small">Nessun alimento adatto in archivio per {profile.name}.</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
-
       <section className="section">
         <div className="section__row">
-          <h2 className="section__title">Nel piatto.</h2>
-          {items.length > 0 && (
+          <h2 className="section__title">
+            Nel piatto. {!empty && <span className="section__sub">{items.length}</span>}
+          </h2>
+          {!empty && (
             <label className="switch">
               <input type="checkbox" checked={game} onChange={(e) => setGame(e.target.checked)} />
               <span className="switch__track" />
-              <span>Gioco</span>
+              <span>Slider</span>
             </label>
           )}
         </div>
-
-        {items.length === 0 && (
-          <button className="card empty-card" onClick={() => setPicking(true)}>
-            <span className="empty-card__plus">
-              <IconPlus size={22} />
-            </span>
-            <span>
-              <strong>Aggiungi il primo alimento</strong>
-              <small>Cerca, scegli un piatto pronto o scansiona un’etichetta.</small>
-            </span>
-          </button>
-        )}
 
         <ul className="items">
           {items.map((it, i) => {
@@ -294,7 +221,7 @@ export function Composer() {
             const step = stepFor(it.grams);
             const sliderMax = Math.max(50, Math.ceil(Math.max(it.grams * 2, (f.portion?.grams ?? 100) * 2) / 10) * 10);
             return (
-              <li key={i} className="card item">
+              <li key={it.foodId} className="card item">
                 <div className="item__top">
                   <span className="item__name">
                     {f.name} <SourceBadge food={f} />
@@ -353,52 +280,128 @@ export function Composer() {
               </li>
             );
           })}
+          <li>
+            <button className="card add-row" onClick={() => setPicking(true)}>
+              <span className="add-row__plus">
+                <IconPlus size={20} />
+              </span>
+              <span>
+                <strong>{empty ? 'Aggiungi il primo alimento' : 'Aggiungi alimento'}</strong>
+                <small>Cerca, piatti pronti o scansiona un’etichetta</small>
+              </span>
+            </button>
+          </li>
         </ul>
-
-        {items.length > 0 && (
-          <div className="actions">
-            <button className="pill" onClick={() => setSaving('')}>
-              Salva come piatto
-            </button>
-            <button className="pill pill--ghost" onClick={() => setItems(() => [])}>
-              Svuota
-            </button>
-          </div>
-        )}
-
-        {saving !== null && (
-          <form
-            className="inline-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (saving.trim()) void saveDish(saving);
-            }}
-          >
-            <input
-              id="dish-name"
-              autoFocus
-              className="search"
-              placeholder="Nome del piatto, es. Wrap kebab"
-              value={saving}
-              onChange={(e) => setSaving(e.target.value)}
-            />
-            <button className="pill pill--solid" type="submit" disabled={!saving.trim()}>
-              Salva
-            </button>
-            <button className="pill pill--ghost" type="button" onClick={() => setSaving(null)}>
-              Annulla
-            </button>
-          </form>
-        )}
+        {!empty && <p className="legend">Blocchi per alimento: proteine · carboidrati · grassi</p>}
       </section>
+
+      {planList.length > 0 && (
+        <section className="section">
+          <h2 className="section__title">
+            Bilancia. <span className="section__sub">Un tocco e sei in Zona.</span>
+          </h2>
+          {planList.map((p) => {
+            const big = p.targetBlocks > profile.blocksPerMeal * 1.25;
+            return (
+              <div key={p.kind} className={`card plan plan--${p.kind}`}>
+                <div className="plan__head">
+                  <div>
+                    <p className="plan__title">{PLAN_TITLE[p.kind]}</p>
+                    <p className="plan__sub">
+                      {p.after.inZone ? 'In Zona' : 'Più vicino alla Zona'} a {n1(p.targetBlocks)} blocchi
+                      {big && ` · ${n1(p.targetBlocks / profile.blocksPerMeal)} pasti di ${profile.name}`}
+                    </p>
+                  </div>
+                  <p className="plan__big">
+                    {n1(p.targetBlocks)}
+                    <span>bl</span>
+                  </p>
+                </div>
+                <ul className="plan__list">
+                  {p.changes.map((c) => (
+                    <li key={c.foodId} className="plan__row">
+                      <span className={`plan__g ${c.deltaGrams > 0 ? 'is-add' : 'is-cut'}`}>
+                        {c.deltaGrams > 0 ? '+' : '−'}
+                        {n0(Math.abs(c.deltaGrams))} g
+                      </span>
+                      <span className="plan__name">
+                        {c.foodName}
+                        <small>
+                          {c.portionHint
+                            ? ` = ${c.portionHint}`
+                            : c.deltaGrams < 0
+                              ? c.newGrams > 0
+                                ? ` → ${n0(c.newGrams)} g`
+                                : ' (tutto)'
+                              : ''}
+                        </small>
+                      </span>
+                      {c.deltaGrams > 0 && (
+                        <button
+                          className="plan__swap"
+                          onClick={() => setExclude((s) => new Set([...s, c.foodId]))}
+                          aria-label={`Proponi un’alternativa a ${c.foodName}`}
+                          title="Un’altra opzione"
+                        >
+                          ↻
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <button className="pill pill--solid plan__apply" onClick={() => applyPlan(p)}>
+                  Applica
+                </button>
+              </div>
+            );
+          })}
+          {exclude.size > 0 && (
+            <button className="pill pill--ghost" onClick={() => setExclude(new Set())}>
+              Ripristina le proposte iniziali
+            </button>
+          )}
+        </section>
+      )}
+
+      {!empty && (
+        <div className="actions">
+          <button className="pill" onClick={() => setSaving('')}>
+            Salva come piatto
+          </button>
+          <button className="pill pill--ghost" onClick={() => setItems(() => [])}>
+            Svuota
+          </button>
+        </div>
+      )}
+
+      {saving !== null && (
+        <form
+          className="inline-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (saving.trim()) void saveDish(saving);
+          }}
+        >
+          <input
+            id="dish-name"
+            autoFocus
+            className="search"
+            placeholder="Nome del piatto, es. Wrap kebab"
+            value={saving}
+            onChange={(e) => setSaving(e.target.value)}
+          />
+          <button className="pill pill--solid" type="submit" disabled={!saving.trim()}>
+            Salva
+          </button>
+          <button className="pill pill--ghost" type="button" onClick={() => setSaving(null)}>
+            Annulla
+          </button>
+        </form>
+      )}
 
       {totals.missing.length > 0 && (
         <p className="muted small">{totals.missing.length} alimenti non più in archivio, ignorati nei calcoli.</p>
       )}
-
-      <button className="fab" onClick={() => setPicking(true)} aria-label="Aggiungi alimento">
-        <IconPlus size={26} />
-      </button>
 
       {picking && (
         <FoodPicker

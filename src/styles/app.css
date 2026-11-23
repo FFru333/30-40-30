@@ -189,7 +189,8 @@ button {
 
 .pill--solid,
 .btn--primary,
-.card .btn--primary {
+.card .btn--primary,
+.card .pill--solid {
   background: var(--ink);
   color: var(--paper);
 }
@@ -376,24 +377,12 @@ button {
 /* ---------- Testata del pasto ---------- */
 
 .hero {
-  --h1: var(--hero-empty);
-  --h2: var(--hero-empty-2);
   margin-top: calc(-1 * env(safe-area-inset-top, 0px));
   margin-left: calc(-1 * var(--gl));
   margin-right: calc(-1 * var(--gr));
   padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
-  padding-bottom: 6px;
-  background: linear-gradient(180deg, var(--h1) 0%, var(--h2) 62%, var(--paper) 100%);
-}
-
-.hero--in {
-  --h1: var(--hero-in);
-  --h2: var(--hero-in-2);
-}
-
-.hero--out {
-  --h1: var(--hero-out);
-  --h2: var(--hero-out-2);
+  padding-bottom: 18px;
+  background: linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 55%, var(--paper) 100%);
 }
 
 .hero__inner {
@@ -461,8 +450,24 @@ button {
 
 .hero__kind {
   display: flex;
+  align-items: center;
   gap: 6px;
   margin-top: 10px;
+}
+
+.hero__add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px 0 10px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .kind {
@@ -1394,4 +1399,324 @@ button {
   .glass-seg__btn {
     padding: 0 12px;
   }
+}
+
+/* ---------- Anello 30/40/30 ---------- */
+
+.ring {
+  position: relative;
+  width: min(270px, 74vw);
+  aspect-ratio: 1;
+  max-width: 100%;
+  margin: 18px auto 0;
+}
+
+.ring svg {
+  display: block;
+  overflow: visible;
+}
+
+.ring__track {
+  fill: none;
+  stroke: var(--ring-track);
+  stroke-width: 20;
+}
+
+.ring__track--out {
+  stroke-width: 5;
+}
+
+.ring__guide {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: butt;
+  opacity: 0.55;
+}
+
+.ring__arc {
+  fill: none;
+  stroke-width: 20;
+  stroke-linecap: butt;
+  transition: d 160ms ease-out;
+}
+
+.ring__guide--protein,
+.ring__arc--protein {
+  stroke: var(--protein);
+}
+.ring__guide--carbs,
+.ring__arc--carbs {
+  stroke: var(--carbs);
+}
+.ring__guide--fat,
+.ring__arc--fat {
+  stroke: var(--fat);
+}
+
+.ring__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.ring__pill {
+  padding: 4px 12px;
+  border-radius: var(--r-ctl);
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ring__pill.is-in {
+  background: var(--ok);
+  color: #fff;
+  box-shadow: none;
+}
+
+.ring__pill.is-out {
+  background: var(--warn);
+  color: #fff;
+  box-shadow: none;
+}
+
+.ring__kcal {
+  margin-top: 4px;
+  font-size: clamp(54px, 17vw, 72px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.ring__unit {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.hero__line {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 17px;
+  text-wrap: balance;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.stat {
+  --c: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 18px;
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.stat--protein {
+  --c: var(--protein);
+}
+.stat--carbs {
+  --c: var(--carbs);
+}
+.stat--fat {
+  --c: var(--fat);
+}
+
+.stat__label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.stat__pct {
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.stat__pct small {
+  margin-left: 2px;
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.stat__bar {
+  height: 4px;
+  margin: 4px 0 2px;
+  border-radius: 2px;
+  background: var(--ring-track);
+  overflow: hidden;
+}
+
+.stat__bar span {
+  display: block;
+  height: 100%;
+  background: var(--c);
+  border-radius: 2px;
+  transition: width 160ms ease-out;
+}
+
+.stat__blocks {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stat__state {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat.is-low .stat__state,
+.stat.is-high .stat__state {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.hero .others {
+  justify-content: center;
+}
+
+.hero .others__btn {
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px var(--glass-line);
+}
+
+/* ---------- Piatto e piano ---------- */
+
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  cursor: pointer;
+}
+
+.add-row small {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.add-row__plus {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  flex: none;
+}
+
+.legend {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.plan__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.plan__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.plan__sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.plan__big {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.plan__big span {
+  margin-left: 3px;
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.plan__list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.plan__row {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.plan__g {
+  font-weight: 600;
+}
+
+.plan__g.is-cut {
+  color: var(--warn);
+}
+
+.plan__name {
+  min-width: 0;
+  font-size: 15px;
+}
+
+.plan__name small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.plan__swap {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tile);
+  font-size: 17px;
+  color: var(--muted);
+}
+
+.plan__apply {
+  width: 100%;
+  margin-top: 12px;
 }
