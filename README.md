@@ -4,6 +4,13 @@ PWA mobile-first per comporre pasti a Zona per due profili (Luca, Marina): blocc
 carboidrati e grassi, stato "in Zona sì/no" e suggerimenti calcolati su cosa aggiungere o togliere.
 Nessun backend: i dati stanno in IndexedDB sul telefono, con export/import JSON.
 
+## Giornata
+
+Si mangia di tutto: il budget è giornaliero. Calorie dal metabolismo (Mifflin–St Jeor × attività × obiettivo)
+o scritte a mano → blocchi al giorno (1 blocco = 91 kcal: 3000 kcal = 33 blocchi). I pasti si registrano man mano;
+"Controbilancia" lavora sulla giornata (quanto mangiato + piatto attuale): *Bilancia* allinea i tre macro al più alto,
+*Pasto bilanciato / Chiudi la giornata* propone un pasto pari che avvicina o chiude il budget.
+
 ## Modello Zona
 
 - 1 blocco = 7 g proteine + 9 g carboidrati netti + 3 g grassi totali (28 + 36 + 27 kcal ≈ 31/40/30).

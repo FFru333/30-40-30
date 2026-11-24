@@ -15,6 +15,16 @@
   inherits: true;
   initial-value: 0;
 }
+@property --e {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+@property --p {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
 
 html {
   -webkit-text-size-adjust: 100%;
@@ -1525,4 +1535,328 @@ html {
   html {
     scroll-behavior: auto;
   }
+}
+
+/* ---------- Giornata ---------- */
+
+.datenav {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.datenav button {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.datenav button:disabled {
+  opacity: 0.3;
+}
+
+.datenav span {
+  min-width: 64px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.budget {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.budget__num {
+  font-size: clamp(64px, 22vw, 96px);
+  font-weight: 600;
+  line-height: 0.82;
+  letter-spacing: -0.06em;
+}
+
+.budget__of {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 2px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.budget__of small {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.hint a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.daybars {
+  display: grid;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.daybars__row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 10px;
+}
+
+.daybars__label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.daybars__label span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.daybars__label strong {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.daybars__track {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: 2px;
+}
+
+/* Un segmento = un blocco della giornata. --e: mangiato, --p: nel piatto. */
+.bk {
+  position: relative;
+  display: block;
+  height: 26px;
+  border-radius: 3px;
+  background: var(--faint);
+  overflow: hidden;
+  transition:
+    --e 260ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    --p 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.bk::before,
+.bk::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.bk::before {
+  left: 0;
+  width: calc(var(--e) * 100%);
+  background: var(--ink);
+}
+
+.bk::after {
+  left: calc(var(--e) * 100%);
+  width: calc(var(--p) * 100%);
+  background: var(--hatch), rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(11, 11, 11, 0.35);
+}
+
+.bk.is-over {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(11, 11, 11, 0.4);
+}
+
+.daybars__note {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  color: var(--muted);
+}
+
+.daybars__row.is-low .daybars__note,
+.daybars__row.is-high .daybars__note {
+  color: var(--ink);
+}
+
+.daybars__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.daybars__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bk--key {
+  width: 16px;
+  height: 12px;
+}
+
+.meals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.meal {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-areas:
+    'time names'
+    'time b'
+    'time actions';
+  column-gap: 12px;
+  row-gap: 6px;
+  padding: 12px 10px 10px 14px;
+  border-radius: var(--r);
+  background: var(--surface);
+}
+
+.meal__time {
+  grid-area: time;
+  font-size: 15px;
+  font-weight: 600;
+  padding-top: 1px;
+}
+
+.meal__names {
+  grid-area: names;
+  font-size: 15px;
+}
+
+.meal__b {
+  grid-area: b;
+  display: flex;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.meal__b small {
+  margin-right: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.meal__actions {
+  grid-area: actions;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.meal__btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.platesum {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.platesum strong {
+  color: var(--ink);
+}
+
+.add--ghost {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.add--log {
+  min-height: 60px;
+  font-size: 17px;
+}
+
+.toast {
+  margin: 0 0 10px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: 15px;
+  font-weight: 600;
+  animation: rise 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Profilo: fabbisogno */
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.unitbox {
+  position: relative;
+  display: block;
+}
+
+.unitbox small {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.unitbox input {
+  padding-right: 38px;
+}
+
+.card .field input {
+  background: var(--mood-plain);
+}
+
+.seg--inline {
+  margin-bottom: 4px;
+}
+
+.calc {
+  margin: 10px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.calc strong {
+  color: var(--ink);
+}
+
+.card .field {
+  margin-top: 10px;
 }

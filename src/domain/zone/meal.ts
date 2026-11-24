@@ -57,3 +57,11 @@ export function kcalSplit(g: MacroGrams): Record<Macro, number> {
   for (const m of MACROS) out[m] = (g[m] * KCAL_PER_G[m]) / total;
   return out;
 }
+
+/** Totali del piatto più una base fissa (es. quanto già mangiato oggi). */
+export function totalsWith(items: Ingredient[], lookup: FoodLookup, base?: MacroGrams): MacroGrams {
+  const t = mealTotals(items, lookup);
+  return base
+    ? { protein: t.protein + base.protein, carbs: t.carbs + base.carbs, fat: t.fat + base.fat }
+    : { protein: t.protein, carbs: t.carbs, fat: t.fat };
+}

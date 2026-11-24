@@ -1,6 +1,7 @@
 import type { Food } from '../domain/food/types';
 import type { Profile } from '../domain/profile/types';
 import type { Draft, ZoneDB } from './schema';
+import type { DayLog } from '../domain/zone/day';
 
 export const BACKUP_FORMAT = 'zone-planner-backup';
 export const BACKUP_VERSION = 1;
@@ -12,13 +13,15 @@ export interface Backup {
   foods: Food[];
   profiles: Profile[];
   drafts: Draft[];
+  days?: DayLog[];
 }
 
 export async function exportBackup(db: ZoneDB): Promise<Backup> {
-  const [foods, profiles, drafts] = await Promise.all([
+  const [foods, profiles, drafts, days] = await Promise.all([
     db.foods.toArray(),
     db.profiles.toArray(),
     db.drafts.toArray(),
+    db.days.toArray(),
   ]);
   return {
     format: BACKUP_FORMAT,
@@ -27,6 +30,7 @@ export async function exportBackup(db: ZoneDB): Promise<Backup> {
     foods,
     profiles,
     drafts,
+    days,
   };
 }
 
@@ -87,15 +91,17 @@ export function parseBackup(raw: unknown): Backup {
     foods: o.foods as Food[],
     profiles: o.profiles as Profile[],
     drafts: Array.isArray(o.drafts) ? (o.drafts as Draft[]) : [],
+    days: Array.isArray(o.days) ? (o.days as DayLog[]) : [],
   };
 }
 
 /** Sostituisce tutti i dati con quelli del backup. */
 export async function restoreBackup(db: ZoneDB, b: Backup): Promise<void> {
-  await db.transaction('rw', db.foods, db.profiles, db.drafts, async () => {
-    await Promise.all([db.foods.clear(), db.profiles.clear(), db.drafts.clear()]);
+  await db.transaction('rw', [db.foods, db.profiles, db.drafts, db.days], async () => {
+    await Promise.all([db.foods.clear(), db.profiles.clear(), db.drafts.clear(), db.days.clear()]);
     await db.foods.bulkPut(b.foods);
     await db.profiles.bulkPut(b.profiles);
     if (b.drafts.length) await db.drafts.bulkPut(b.drafts);
+    if (b.days?.length) await db.days.bulkPut(b.days);
   });
 }

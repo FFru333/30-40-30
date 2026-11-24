@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { Food, Ingredient } from '../domain/food/types';
 import { DEFAULT_TOLERANCE, type Profile } from '../domain/profile/types';
 import { SEED_FOODS } from '../data/seed-foods';
+import type { DayLog } from '../domain/zone/day';
 
 export interface Draft {
   id: 'current';
@@ -15,6 +16,7 @@ export class ZoneDB extends Dexie {
   foods!: EntityTable<Food, 'id'>;
   profiles!: EntityTable<Profile, 'id'>;
   drafts!: EntityTable<Draft, 'id'>;
+  days!: EntityTable<DayLog, 'id'>;
 
   constructor(name = 'zone-planner') {
     super(name);
@@ -43,6 +45,13 @@ export class ZoneDB extends Dexie {
         const table = tx.table<Food, string>('foods');
         for (const seed of SEED_FOODS) if (seed.suggest === false) await table.update(seed.id, { suggest: false });
       });
+    // v4: la giornata. Pasti registrati per profilo e data; budget dalle calorie.
+    this.version(4)
+      .stores({ foods: 'id, name, diet, source', profiles: 'id', drafts: 'id', days: 'id, profileId, date' })
+      .upgrade(async (tx) => {
+        const luca = await tx.table<Profile, string>('profiles').get('luca');
+        if (luca && luca.dailyKcal === undefined) await tx.table('profiles').update('luca', { dailyKcal: 3000 });
+      });
     this.on('populate', (tx) => {
       tx.table('foods').bulkAdd(SEED_FOODS);
       tx.table('profiles').bulkAdd(DEFAULT_PROFILES);
@@ -56,6 +65,7 @@ export const DEFAULT_PROFILES: Profile[] = [
     id: 'luca',
     name: 'Luca',
     diet: 'onnivoro',
+    dailyKcal: 3000,
     blocksPerMeal: 4,
     mealsPerDay: 3,
     blocksPerSnack: 1,

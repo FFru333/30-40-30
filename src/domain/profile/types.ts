@@ -1,4 +1,5 @@
 import type { DietTag } from '../food/types';
+import { kcalToBlocks, targetKcal, type Activity, type Body, type Goal } from './energy';
 
 export type Diet = 'onnivoro' | 'pescetariano' | 'vegetariano' | 'vegano';
 
@@ -19,6 +20,27 @@ export interface Profile {
   snacksPerDay: number;
   tolerance: Tolerance;
   excludedFoodIds: string[];
+  /** Dati per il calcolo del fabbisogno. */
+  body?: Body;
+  activity?: Activity;
+  goal?: Goal;
+  /** Calorie della giornata scritte a mano: hanno la precedenza sul calcolo. */
+  dailyKcal?: number;
+}
+
+/** Calorie della giornata: quelle scritte a mano, altrimenti dal metabolismo. */
+export function dailyKcalOf(p: Profile): number | null {
+  if (p.dailyKcal && p.dailyKcal > 0) return p.dailyKcal;
+  const b = p.body;
+  if (b && b.sex && b.age > 0 && b.weightKg > 0 && b.heightCm > 0)
+    return targetKcal(b, p.activity ?? 'leggero', p.goal ?? 'mantenere');
+  return null;
+}
+
+/** Blocchi della giornata: dalle calorie se note, altrimenti dalla somma pasti + spuntini. */
+export function dayBudget(p: Profile): number {
+  const k = dailyKcalOf(p);
+  return k ? kcalToBlocks(k) : dailyBlocks(p);
 }
 
 export const DEFAULT_TOLERANCE: Tolerance = { protein: 0.5, carbs: 0.5, fat: 0.5 };

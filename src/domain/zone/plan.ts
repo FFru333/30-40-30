@@ -2,7 +2,8 @@ import type { Food, Ingredient } from '../food/types';
 import type { Tolerance } from '../profile/types';
 import { MACROS } from './blocks';
 import { balance } from './balance';
-import { mealTotals, type FoodLookup } from './meal';
+import { totalsWith, type FoodLookup } from './meal';
+import type { MacroGrams } from './blocks';
 import { evaluate, type ZoneStatus } from './status';
 
 export interface PlanChange {
@@ -22,7 +23,7 @@ export interface Plan {
    * `fit`:   il piatto resta nei blocchi del profilo: si riduce ciò che eccede, poi si completa.
    * `fill`:  nessun eccesso, si completa ciò che manca.
    */
-  kind: 'adapt' | 'fit' | 'fill';
+  kind: 'adapt' | 'fit' | 'fill' | 'close';
   targetBlocks: number;
   changes: PlanChange[];
   items: Ingredient[];
@@ -37,6 +38,8 @@ export interface PlanInput {
   pool: Food[];
   /** Alimenti da non proporre (es. "prova un'altra opzione"). */
   exclude?: Set<string>;
+  /** Macro già mangiati oggi: contano nel bilancio ma non si toccano. */
+  base?: MacroGrams;
 }
 
 const roundUpHalf = (x: number) => Math.ceil(x * 2 - 1e-9) / 2;
@@ -52,18 +55,24 @@ function applyDelta(items: Ingredient[], foodId: string, delta: number): Ingredi
 function fillUp(input: PlanInput, items: Ingredient[], target: number, lookup: FoodLookup, protect: Set<string>) {
   const pool = input.pool.filter((f) => !input.exclude?.has(f.id));
   let cur = items;
-  for (let step = 0; step < 4; step++) {
-    const s = evaluate(mealTotals(cur, lookup), target, input.tolerance);
+  for (let step = 0; step < 10; step++) {
+    const s = evaluate(totalsWith(cur, lookup, input.base), target, input.tolerance);
     if (s.inZone) break;
-    const adv = balance({ items: cur, lookup, targetBlocks: target, tolerance: input.tolerance, pool, maxOptions: 3 })
-      .filter((a) => a.direction === 'add');
+    const all = balance({ items: cur, lookup, targetBlocks: target, tolerance: input.tolerance, pool, maxOptions: 3, base: input.base });
     // Prima le proteine, poi i carboidrati, i grassi per ultimi: le fonti proteiche
     // portano anche grasso, e l'olio si dosa meglio alla fine.
     const order = ['protein', 'carbs', 'fat'];
-    const a = [...adv].sort((x, y) => order.indexOf(x.macro) - order.indexOf(y.macro))[0];
+    const adds = all.filter((a) => a.direction === 'add').sort((x, y) => order.indexOf(x.macro) - order.indexOf(y.macro));
+    const a = adds[0];
     const opt = a?.options.find((o) => !protect.has(o.foodId) || o.currentGrams > 0);
-    if (!a || !opt) break;
-    cur = applyDelta(cur, opt.foodId, opt.grams);
+    if (a && opt) {
+      cur = applyDelta(cur, opt.foodId, opt.grams);
+      continue;
+    }
+    // Niente da aggiungere ma qualcosa sfora: riduci ciò che il piano ha appena aggiunto.
+    const cut = all.find((x) => x.direction === 'remove')?.options.find((o) => !items.some((i) => i.foodId === o.foodId));
+    if (!cut) break;
+    cur = applyDelta(cur, cut.foodId, -cut.grams);
   }
   return cur;
 }
@@ -97,7 +106,7 @@ function diff(before: Ingredient[], after: Ingredient[], lookup: FoodLookup): Pl
 export function plans(input: PlanInput): Plan[] {
   const { items, lookup, targetBlocks: n, tolerance } = input;
   if (items.length === 0) return [];
-  const status = evaluate(mealTotals(items, lookup), n, tolerance);
+  const status = evaluate(totalsWith(items, lookup, input.base), n, tolerance);
   if (status.inZone) return [];
   const out: Plan[] = [];
   const protect = new Set<string>();
@@ -106,7 +115,7 @@ export function plans(input: PlanInput): Plan[] {
   const anyHigh = MACROS.some((m) => status.macros[m].state === 'high');
 
   const make = (kind: Plan['kind'], target: number, next: Ingredient[]) => {
-    const after = evaluate(mealTotals(next, lookup), target, tolerance);
+    const after = evaluate(totalsWith(next, lookup, input.base), target, tolerance);
     const changes = diff(items, next, lookup);
     if (changes.length) out.push({ kind, targetBlocks: target, changes, items: next, after });
   };
@@ -119,10 +128,10 @@ export function plans(input: PlanInput): Plan[] {
     // Resta nei blocchi: riduci ciò che eccede, poi completa.
     let cur = items;
     for (let step = 0; step < 3; step++) {
-      const s = evaluate(mealTotals(cur, lookup), n, tolerance);
+      const s = evaluate(totalsWith(cur, lookup, input.base), n, tolerance);
       const high = MACROS.map((m) => s.macros[m]).filter((x) => x.state === 'high');
       if (!high.length) break;
-      const adv = balance({ items: cur, lookup, targetBlocks: n, tolerance, pool: [], maxOptions: 1 }).find(
+      const adv = balance({ items: cur, lookup, targetBlocks: n, tolerance, pool: [], maxOptions: 1, base: input.base }).find(
         (a) => a.direction === 'remove',
       );
       const opt = adv?.options[0];
@@ -147,8 +156,8 @@ export interface PlanGroup {
  * Più modi di controbilanciare: per ogni strategia fino a `n` varianti, ognuna con
  * un alimento principale diverso (tonno, poi gamberi, poi uova…).
  */
-export function planGroups(input: PlanInput, n = 3): PlanGroup[] {
-  const first = plans(input);
+export function planGroups(input: PlanInput, n = 3, gen: (i: PlanInput) => Plan[] = plans): PlanGroup[] {
+  const first = gen(input);
   return first.map((p0) => {
     const variants: Plan[] = [p0];
     const seen = new Set([signature(p0)]);
@@ -161,7 +170,7 @@ export function planGroups(input: PlanInput, n = 3): PlanGroup[] {
       // Varietà vera: dopo "Tonno al naturale" non proporre "Tonno fresco".
       const head = main.foodName.split(/[\s(]/)[0]!.toLowerCase();
       for (const f of input.pool) if (f.name.split(/[\s(]/)[0]!.toLowerCase() === head) ex.add(f.id);
-      const next = plans({ ...input, exclude: ex }).find((p) => p.kind === p0.kind);
+      const next = gen({ ...input, exclude: ex }).find((p) => p.kind === p0.kind);
       if (!next || !next.after.inZone || seen.has(signature(next))) break;
       seen.add(signature(next));
       variants.push(next);
@@ -169,6 +178,36 @@ export function planGroups(input: PlanInput, n = 3): PlanGroup[] {
     }
     return { kind: p0.kind, targetBlocks: p0.targetBlocks, variants };
   });
+}
+
+/**
+ * Piani sulla giornata: `base` è quanto già mangiato, `items` il piatto di adesso.
+ * - `adapt` (Bilancia): aggiungi al piatto ciò che serve perché i tre macro della
+ *   giornata si allineino al più alto. Niente viene tolto.
+ * - `close`: un pasto bilanciato da `mealBlocks` blocchi in più; se arriva al budget
+ *   chiude la giornata.
+ */
+export function dayPlans(input: PlanInput & { budget: number; mealBlocks?: number }): Plan[] {
+  const { items, lookup, tolerance, budget } = input;
+  const totals = totalsWith(items, lookup, input.base);
+  const level = Math.max(totals.protein / 7, totals.carbs / 9, totals.fat / 3);
+  const out: Plan[] = [];
+  const protect = new Set<string>();
+  const make = (kind: Plan['kind'], target: number, next: Ingredient[]) => {
+    const after = evaluate(totalsWith(next, lookup, input.base), target, tolerance);
+    const changes = diff(items, next, lookup);
+    if (changes.length) out.push({ kind, targetBlocks: target, changes, items: next, after });
+  };
+  const now = evaluate(totals, level, tolerance);
+  if (!now.inZone && level > 0) {
+    const t = roundUpHalf(level);
+    make('adapt', t, fillUp(input, items, t, lookup, protect));
+  }
+  // Un pasto bilanciato di dimensione normale; se basta a finire il budget, chiude la giornata.
+  const step = input.mealBlocks ?? budget;
+  const goal = Math.min(budget, roundUpHalf(level) + step);
+  if (goal - level >= 1) make('close', goal, fillUp(input, items, goal, lookup, protect));
+  return out;
 }
 
 function signature(p: Plan): string {

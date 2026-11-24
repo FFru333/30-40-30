@@ -1,7 +1,7 @@
 import type { Food, Ingredient } from '../food/types';
 import type { Tolerance } from '../profile/types';
 import { KCAL_PER_G, MACROS, netCarbs, type Macro, type MacroGrams } from './blocks';
-import { mealTotals, type FoodLookup } from './meal';
+import { totalsWith, type FoodLookup } from './meal';
 import { evaluate, type MacroState, type ZoneStatus } from './status';
 
 export interface Suggestion {
@@ -41,6 +41,8 @@ export interface BalanceInput {
   maxOptions?: number;
   /** false: non scartare le opzioni meno buone della migliore (più scelta, ordinate). */
   strict?: boolean;
+  /** Macro già mangiati e non modificabili (la giornata finora). */
+  base?: MacroGrams;
 }
 
 function macroPer100(food: Food, m: Macro): number {
@@ -114,7 +116,7 @@ function evaluateChange(
   const { items, lookup, targetBlocks, tolerance } = input;
   const nextItems = withChange(items, food.id, delta);
   const look: FoodLookup = (id) => (id === food.id ? food : lookup(id));
-  const after = evaluate(mealTotals(nextItems, look), targetBlocks, tolerance);
+  const after = evaluate(totalsWith(nextItems, look, input.base), targetBlocks, tolerance);
   const current = items.filter((i) => i.foodId === food.id).reduce((a, i) => a + i.grams, 0);
   const grams = Math.abs(delta);
   const suggestion: Suggestion = {
@@ -147,7 +149,7 @@ function evaluateChange(
 export function balance(input: BalanceInput): Advice[] {
   const { items, lookup, targetBlocks, tolerance, pool } = input;
   const maxOptions = input.maxOptions ?? 3;
-  const status = evaluate(mealTotals(items, lookup), targetBlocks, tolerance);
+  const status = evaluate(totalsWith(items, lookup, input.base), targetBlocks, tolerance);
   const inMeal = new Set(items.map((i) => i.foodId));
 
   const offenders = MACROS.map((m) => status.macros[m])
@@ -172,7 +174,7 @@ export function balance(input: BalanceInput): Advice[] {
       for (const f of candidates.values()) {
         const density = macroPer100(f, m) / 100;
         let grams = roundGrams(needGrams / density);
-        if (grams > 500) continue;
+        if (grams > 400) grams = 400; // porzioni enormi: meglio due alimenti diversi
         // Se una porzione intera centra comunque il macro, preferiscila.
         if (f.portion && f.portion.grams > 0) {
           const n = Math.round(grams / f.portion.grams);

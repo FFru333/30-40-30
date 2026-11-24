@@ -1,40 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db, EMPTY_DRAFT, type Draft } from '../../db/schema';
 import type { Food, Ingredient } from '../../domain/food/types';
-import type { Profile } from '../../domain/profile/types';
+import { dailyKcalOf, dayBudget, type Profile } from '../../domain/profile/types';
+import { BLOCK_KCAL } from '../../domain/profile/energy';
 import { buildComposite } from '../../domain/food/composite';
-import { MACROS, gramsToBlocks } from '../../domain/zone/blocks';
-import { foodMacros, kcalSplit, mealTotals } from '../../domain/zone/meal';
-import { evaluate, type ZoneStatus } from '../../domain/zone/status';
-import { planGroups, type Plan } from '../../domain/zone/plan';
+import { MACROS, gramsToBlocks, type MacroGrams } from '../../domain/zone/blocks';
+import { foodMacros, macroKcal, mealTotals, totalsWith } from '../../domain/zone/meal';
+import type { ZoneStatus } from '../../domain/zone/status';
+import { dayId, dayStatus, dayTolerance, eatenTotals, localDate, type DayLog } from '../../domain/zone/day';
+import { dayPlans, planGroups, type Plan } from '../../domain/zone/plan';
 import { balance, type Advice, type Suggestion } from '../../domain/zone/balance';
 import { MacroSig } from '../../ui/MacroSig';
 import { GramsInput } from '../../ui/GramsInput';
 import { allowedFoods, newId, useFoodMap, useFoods, useProfiles } from '../../app/data';
-import { BlockMatrix } from '../../ui/Blocks';
+import { DayBars } from '../../ui/DayBars';
 import { IconPlus } from '../../ui/icons';
 import { SourceBadge } from '../../ui/SourceBadge';
-import { MACRO_LABEL, MACRO_OF, MACRO_SHORT, blocchi, n0, n1, pct } from '../../ui/format';
+import { MACRO_LABEL, MACRO_OF, MACRO_SHORT, blocchi, n0, n1 } from '../../ui/format';
 import { FoodPicker } from './FoodPicker';
-
-function statusLine(s: ZoneStatus): string {
-  const w = s.worst;
-  if (!w) return 'Proteine, carboidrati e grassi sono in equilibrio.';
-  const b = Math.abs(w.deltaBlocks);
-  return w.state === 'low'
-    ? `Mancano ${n1(b)} ${blocchi(b)} ${MACRO_OF[w.macro]}.`
-    : `${n1(b)} ${blocchi(b)} ${MACRO_OF[w.macro]} in più: adegua il resto.`;
-}
-
-function shortStatus(s: ZoneStatus): string {
-  if (s.inZone) return 'in Zona';
-  return MACROS.filter((m) => s.macros[m].state !== 'ok')
-    .map((m) => {
-      const d = s.macros[m].deltaBlocks;
-      return `${MACRO_LABEL[m].toLowerCase()} ${d > 0 ? '+' : '−'}${n1(Math.abs(d))}`;
-    })
-    .join(' · ');
-}
 
 const stepFor = (g: number) => (g < 20 ? 1 : 5);
 
@@ -44,17 +28,38 @@ function setThemeColor(mood: keyof typeof MOOD_COLOR) {
   for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = MOOD_COLOR[mood];
 }
 
+function balanceLine(s: ZoneStatus): string {
+  const w = s.worst;
+  if (!w) return 'Proteine, carboidrati e grassi della giornata sono allineati.';
+  const b = Math.abs(w.deltaBlocks);
+  return w.state === 'low'
+    ? `Per bilanciare la giornata mancano ${n1(b)} ${blocchi(b)} ${MACRO_OF[w.macro]}.`
+    : `${n1(b)} ${blocchi(b)} ${MACRO_OF[w.macro]} in più rispetto agli altri.`;
+}
+
 const PLAN_TITLE: Record<Plan['kind'], string> = {
+  adapt: 'Bilancia',
+  close: 'Pasto bilanciato',
   fill: 'Completa',
-  adapt: 'Tieni tutto',
   fit: 'Resta nei blocchi',
 };
 
-const PLAN_NOTE: Record<Plan['kind'], string> = {
-  fill: 'Aggiungi ciò che manca, il resto non cambia.',
-  adapt: 'Non togli niente: gli altri macro crescono fino a quello in eccesso.',
-  fit: 'Riduci ciò che eccede e completa, restando nei tuoi blocchi.',
-};
+function dayLabel(date: string): string {
+  const today = localDate();
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  if (date === today) return 'Oggi';
+  if (date === localDate(y)) return 'Ieri';
+  const [yy, mm, dd] = date.split('-').map(Number);
+  return new Date(yy!, mm! - 1, dd!).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function shiftDate(date: string, days: number): string {
+  const [yy, mm, dd] = date.split('-').map(Number);
+  return localDate(new Date(yy!, mm! - 1, dd! + days));
+}
+
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
 export function Composer() {
   const foods = useFoods();
@@ -62,10 +67,13 @@ export function Composer() {
   const foodMap = useFoodMap(foods);
 
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [date, setDate] = useState(localDate);
   const [picking, setPicking] = useState(false);
   const [game, setGame] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [strategy, setStrategy] = useState<Plan['kind'] | null>(null);
+  const [openTweaks, setOpenTweaks] = useState<Set<string>>(() => new Set());
+  const [justLogged, setJustLogged] = useState(false);
 
   // Carica la bozza una volta, poi la salva con un piccolo ritardo.
   useEffect(() => {
@@ -96,53 +104,69 @@ export function Composer() {
   }, []);
 
   const profile: Profile | undefined = profiles?.find((p) => p.id === draft?.activeProfileId) ?? profiles?.[0];
+  const day = useLiveQuery(
+    async (): Promise<DayLog | null> => (profile ? ((await db.days.get(dayId(profile.id, date))) ?? null) : null),
+    [profile?.id, date],
+  );
+  const meals = useMemo(() => day?.meals ?? [], [day]);
   const items = draft?.items ?? [];
   const lookup = (id: string) => foodMap.get(id);
-  const totals = useMemo(() => mealTotals(items, lookup), [items, foodMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const blocksFor = (p: Profile) => draft?.blocksByProfile[p.id] ?? p.blocksPerMeal;
-  const target = profile ? blocksFor(profile) : 0;
+  const eaten = useMemo(() => eatenTotals(meals, lookup), [meals, foodMap]); // eslint-disable-line react-hooks/exhaustive-deps
+  const plateT = useMemo(() => mealTotals(items, lookup), [items, foodMap]); // eslint-disable-line react-hooks/exhaustive-deps
+  const plate: MacroGrams = { protein: plateT.protein, carbs: plateT.carbs, fat: plateT.fat };
+  const budget = profile ? dayBudget(profile) : 0;
+  const mealBlocks = profile ? Math.max(2, Math.round((budget / (profile.mealsPerDay + profile.snacksPerDay * 0.5)) * 2) / 2) : 4;
   const pool = useMemo(() => (foods && profile ? allowedFoods(foods, profile) : []), [foods, profile]);
+  const dayTol = profile ? dayTolerance(profile.tolerance) : { protein: 1, carbs: 1, fat: 1 };
+
   const groups = useMemo(
     () =>
-      profile && items.length
-        ? planGroups({ items, lookup, targetBlocks: target, tolerance: profile.tolerance, pool }, 5)
+      profile && (items.length || meals.length)
+        ? planGroups({ items, lookup, targetBlocks: 0, tolerance: dayTol, pool, base: eaten }, 5, (i) =>
+            dayPlans({ ...i, budget, mealBlocks }),
+          )
         : [],
-    [items, foodMap, target, profile, pool], // eslint-disable-line react-hooks/exhaustive-deps
+    [items, meals, foodMap, profile, pool, eaten, budget, mealBlocks], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  // Ritocchi singoli: per ogni macro fuori tolleranza, più alimenti da aggiungere o ridurre.
-  // Calcolati sui blocchi della strategia scelta: con "Tieni tutto" si completa fino al macro più alto.
-  const tweakTarget = (groups.find((g) => g.kind === strategy) ?? groups[0])?.targetBlocks ?? target;
+  const group = groups.find((g) => g.kind === strategy) ?? groups[0];
+  const tweakTarget = group?.targetBlocks ?? 0;
   const tweaks = useMemo(
     () =>
-      profile && items.length
-        ? balance({ items, lookup, targetBlocks: tweakTarget, tolerance: profile.tolerance, pool, maxOptions: 6, strict: false })
+      profile && group
+        ? balance({
+            items,
+            lookup,
+            targetBlocks: tweakTarget,
+            tolerance: dayTol,
+            pool,
+            maxOptions: 6,
+            strict: false,
+            base: eaten,
+          })
         : [],
-    [items, foodMap, tweakTarget, profile, pool], // eslint-disable-line react-hooks/exhaustive-deps
+    [items, foodMap, tweakTarget, profile, pool, eaten, group], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // Il colore di fondo della pagina racconta lo stato del piatto.
-  const moodNow = !profile || !items.length ? 'empty' : evaluate(totals, target, profile.tolerance).inZone ? 'in' : 'out';
+  const totals = totalsWith(items, lookup, eaten);
+  const status = dayStatus(totals, budget, profile?.tolerance ?? { protein: 0.5, carbs: 0.5, fat: 0.5 });
+  const nothing = items.length === 0 && meals.length === 0;
+  const moodNow = nothing ? 'empty' : status.balance.inZone && !status.overBudget ? 'in' : 'out';
   useEffect(() => {
     document.documentElement.dataset.mood = moodNow;
     setThemeColor(moodNow);
   }, [moodNow]);
-  const [openTweaks, setOpenTweaks] = useState<Set<string>>(() => new Set());
 
-  if (!foods || !profiles || !draft || !profile) return <div className="loading">Carico…</div>;
+  if (!foods || !profiles || !draft || !profile || day === undefined) return <div className="loading">Carico…</div>;
 
-  const status = evaluate(totals, target, profile.tolerance);
-  const split = kcalSplit(totals);
+  const kcal = dailyKcalOf(profile);
   const empty = items.length === 0;
-  const others = profiles.filter((p) => p.id !== profile.id);
 
   const update = (fn: (d: Draft) => Draft) => setDraft((d) => (d ? fn(d) : d));
   const setItems = (fn: (xs: Ingredient[]) => Ingredient[]) => update((d) => ({ ...d, items: fn(d.items) }));
   const setGrams = (idx: number, g: number) =>
     setItems((xs) => xs.map((x, i) => (i === idx ? { ...x, grams: Math.max(0, Math.round(g * 10) / 10) } : x)));
   const removeAt = (idx: number) => setItems((xs) => xs.filter((_, i) => i !== idx));
-  const setTarget = (b: number) =>
-    update((d) => ({ ...d, blocksByProfile: { ...d.blocksByProfile, [profile.id]: Math.min(20, Math.max(0.5, b)) } }));
 
   const add = (f: Food) => {
     const g = f.portion?.grams ?? 100;
@@ -154,18 +178,12 @@ export function Composer() {
   };
 
   const applyPlan = (p: Plan) => {
-    update((d) => ({
-      ...d,
-      items: p.items.map((x) => ({ ...x, grams: Math.round(x.grams * 10) / 10 })),
-      blocksByProfile: { ...d.blocksByProfile, [profile.id]: p.targetBlocks },
-    }));
+    setItems(() => p.items.map((x) => ({ ...x, grams: Math.round(x.grams * 10) / 10 })));
     setStrategy(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const applyTweak = (a: Advice, o: Suggestion) => {
     const delta = a.direction === 'add' ? o.grams : -o.grams;
-    if (tweakTarget !== target) setTarget(tweakTarget);
     setItems((xs) => {
       const i = xs.findIndex((x) => x.foodId === o.foodId);
       if (i < 0) return delta > 0 ? [...xs, { foodId: o.foodId, grams: delta }] : xs;
@@ -174,13 +192,48 @@ export function Composer() {
     });
   };
 
+  const logMeal = async () => {
+    if (!items.length) return;
+    const id = dayId(profile.id, date);
+    const now = new Date();
+    // Per un giorno passato, registra a mezzogiorno di quel giorno.
+    const at = date === localDate() ? now.toISOString() : new Date(`${date}T12:00:00`).toISOString();
+    const cur = (await db.days.get(id)) ?? { id, profileId: profile.id, date, meals: [] };
+    await db.days.put({ ...cur, meals: [...cur.meals, { id: newId('pasto'), at, items }] });
+    setItems(() => []);
+    setJustLogged(true);
+    window.setTimeout(() => setJustLogged(false), 2200);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const removeMeal = async (mealId: string) => {
+    if (!day) return;
+    await db.days.put({ ...day, meals: day.meals.filter((m) => m.id !== mealId) });
+  };
+
+  const reopenMeal = async (mealId: string) => {
+    if (!day) return;
+    const m = day.meals.find((x) => x.id === mealId);
+    if (!m) return;
+    await db.days.put({ ...day, meals: day.meals.filter((x) => x.id !== mealId) });
+    setItems((xs) => {
+      const out = [...xs];
+      for (const it of m.items) {
+        const i = out.findIndex((x) => x.foodId === it.foodId);
+        if (i >= 0) out[i] = { ...out[i]!, grams: out[i]!.grams + it.grams };
+        else out.push({ ...it });
+      }
+      return out;
+    });
+  };
+
   const saveDish = async (name: string) => {
     await db.foods.add(buildComposite(newId('piatto'), name.trim(), items, lookup));
     setSaving(null);
   };
 
-  const mood = empty ? 'empty' : status.inZone ? 'in' : 'out';
-  const group = groups.find((g) => g.kind === strategy) ?? groups[0];
+  const plateB = gramsToBlocks(plate);
+  const usedKcal = macroKcal(totals);
 
   return (
     <div className="composer">
@@ -198,25 +251,35 @@ export function Composer() {
             </button>
           ))}
         </div>
-        <div className="step" aria-label="Blocchi del pasto">
-          <button onClick={() => setTarget(target - 0.5)} aria-label="Meno blocchi">
-            −
+        <div className="datenav" aria-label="Giorno">
+          <button onClick={() => setDate((d) => shiftDate(d, -1))} aria-label="Giorno prima">
+            ‹
           </button>
-          <span>{n1(target)} bl</span>
-          <button onClick={() => setTarget(target + 0.5)} aria-label="Più blocchi">
-            +
+          <span>{dayLabel(date)}</span>
+          <button
+            onClick={() => setDate((d) => shiftDate(d, 1))}
+            disabled={date >= localDate()}
+            aria-label="Giorno dopo"
+          >
+            ›
           </button>
         </div>
       </header>
 
       <h1 className="title" aria-live="polite">
-        {mood === 'empty' ? (
+        {nothing ? (
           <>
-            Piatto
+            Giornata
             <br />
-            vuoto
+            libera
           </>
-        ) : mood === 'in' ? (
+        ) : status.overBudget ? (
+          <>
+            Oltre il
+            <br />
+            budget
+          </>
+        ) : status.balance.inZone ? (
           <>
             In
             <br />
@@ -224,50 +287,78 @@ export function Composer() {
           </>
         ) : (
           <>
-            Fuori
+            Da
             <br />
-            Zona
+            bilanciare
           </>
         )}
       </h1>
-      <p className="lede">{empty ? `${profile.name}: ${n1(target)} ${blocchi(target)} per pasto.` : statusLine(status)}</p>
 
-      <div className="kinds">
-        <button
-          className={`kinds__btn ${target === profile.blocksPerMeal ? 'is-on' : ''}`}
-          onClick={() => setTarget(profile.blocksPerMeal)}
-        >
-          Pasto<sup>{n1(profile.blocksPerMeal)}</sup>
-        </button>
-        <button
-          className={`kinds__btn ${target === profile.blocksPerSnack ? 'is-on' : ''}`}
-          onClick={() => setTarget(profile.blocksPerSnack)}
-        >
-          Spuntino<sup>{n1(profile.blocksPerSnack)}</sup>
-        </button>
-      </div>
-
-      <BlockMatrix status={status} empty={empty} />
-
-      <div className="sumrow">
-        <span>Totale</span>
-        <span className="sumrow__split">
-          {empty ? '' : MACROS.map((m) => `${MACRO_SHORT[m]} ${pct(split[m])}`).join('  ')}
+      <div className="budget">
+        <span className="budget__num">{n1(status.used)}</span>
+        <span className="budget__of">
+          / {n1(budget)} blocchi
+          <small>
+            {n0(usedKcal)} / {kcal ? `${n0(kcal)} kcal` : `${n0(budget * BLOCK_KCAL)} kcal`}
+          </small>
         </span>
-        <strong>{n0(totals.kcalMacro)} kcal</strong>
       </div>
+      <p className="lede">
+        {nothing
+          ? `Hai ${n1(budget)} blocchi da distribuire come vuoi. Conta che a fine giornata proteine, carboidrati e grassi siano pari.`
+          : `${status.left >= 0 ? `Restano ${n1(status.left)} blocchi.` : `${n1(-status.left)} blocchi oltre il budget.`} ${balanceLine(status.balance)}`}
+      </p>
+      {!kcal && (
+        <p className="hint">
+          <a href="#profili">Imposta peso, altezza e attività</a> per calcolare il budget di {profile.name}.
+        </p>
+      )}
 
-      {!empty && others.length > 0 && (
-        <div className="others">
-          {others.map((p) => {
-            const s = evaluate(totals, blocksFor(p), p.tolerance);
-            return (
-              <button key={p.id} className="others__btn" onClick={() => update((d) => ({ ...d, activeProfileId: p.id }))}>
-                <strong>{p.name}</strong> <span>{n1(blocksFor(p))} bl</span> <span>{shortStatus(s)}</span>
-              </button>
-            );
-          })}
-        </div>
+      <DayBars eaten={eaten} plate={plate} day={status} />
+
+      {meals.length > 0 && (
+        <section className="section">
+          <h2 className="h2">
+            Pasti
+            <br />
+            di {dayLabel(date).toLowerCase()}
+            <sup>{meals.length}</sup>
+          </h2>
+          <ul className="meals">
+            {meals.map((m) => {
+              const b = gramsToBlocks(mealTotals(m.items, lookup));
+              const names = m.items.map((i) => foodMap.get(i.foodId)?.name ?? '—');
+              return (
+                <li key={m.id} className="meal">
+                  <span className="meal__time">{timeOf(m.at)}</span>
+                  <span className="meal__names">{names.join(', ')}</span>
+                  <span className="meal__b">
+                    <span>
+                      <small>P</small>
+                      {n1(b.protein)}
+                    </span>
+                    <span>
+                      <small>C</small>
+                      {n1(b.carbs)}
+                    </span>
+                    <span>
+                      <small>G</small>
+                      {n1(b.fat)}
+                    </span>
+                  </span>
+                  <span className="meal__actions">
+                    <button className="meal__btn" onClick={() => reopenMeal(m.id)}>
+                      Modifica
+                    </button>
+                    <button className="x" onClick={() => removeMeal(m.id)} aria-label="Elimina pasto">
+                      ×
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       <section className="section">
@@ -285,6 +376,7 @@ export function Composer() {
             </label>
           )}
         </div>
+        {justLogged && <p className="toast">Pasto registrato.</p>}
 
         <ul className="items">
           {items.map((it, i) => {
@@ -362,10 +454,23 @@ export function Composer() {
           })}
         </ul>
 
-        <button className="add" onClick={() => setPicking(true)}>
+        {!empty && (
+          <p className="platesum">
+            Questo piatto: <strong>P {n1(plateB.protein)}</strong> · <strong>C {n1(plateB.carbs)}</strong> ·{' '}
+            <strong>G {n1(plateB.fat)}</strong> blocchi · {n0(plateT.kcalMacro)} kcal
+          </p>
+        )}
+
+        <button className={empty ? 'add' : 'add add--ghost'} onClick={() => setPicking(true)}>
           <IconPlus size={20} />
-          {empty ? 'Aggiungi il primo alimento' : 'Aggiungi alimento'}
+          {empty ? 'Aggiungi alimento' : 'Aggiungi altro'}
         </button>
+
+        {!empty && (
+          <button className="add add--log" onClick={logMeal}>
+            Registra pasto · {dayLabel(date).toLowerCase()}
+          </button>
+        )}
 
         {!empty && (
           <div className="actions">
@@ -404,7 +509,7 @@ export function Composer() {
         )}
       </section>
 
-      {groups.length > 0 && group && (
+      {group && (
         <section className="section">
           <h2 className="h2">
             Contro-
@@ -421,16 +526,18 @@ export function Composer() {
                   className={`seg__btn ${g.kind === group.kind ? 'is-on' : ''}`}
                   onClick={() => setStrategy(g.kind)}
                 >
-                  {PLAN_TITLE[g.kind]}
-                  <sup>{n1(g.targetBlocks)} bl</sup>
+                  {g.kind === 'close' && g.targetBlocks >= budget ? 'Chiudi la giornata' : PLAN_TITLE[g.kind]}
                 </button>
               ))}
             </div>
           )}
           <p className="note">
-            {PLAN_NOTE[group.kind]}
-            {group.targetBlocks > profile.blocksPerMeal * 1.25 &&
-              ` Diventa un pasto da ${n1(group.targetBlocks)} blocchi, ${n1(group.targetBlocks / profile.blocksPerMeal)} volte il tuo.`}
+            {group.kind === 'adapt'
+              ? `Aggiungi al piatto quello che manca perché la giornata torni pari: ${n1(group.targetBlocks)} blocchi per macro, niente da togliere.`
+              : group.targetBlocks >= budget
+                ? `Un ultimo pasto che porta proteine, carboidrati e grassi a ${n1(budget)} blocchi: giornata chiusa e bilanciata.`
+                : `Un pasto da circa ${n1(group.targetBlocks - status.used)} blocchi che lascia la giornata bilanciata a ${n1(group.targetBlocks)} su ${n1(budget)}.`}
+            {group.targetBlocks > budget + 0.25 && ` Supera il budget di ${n1(group.targetBlocks - budget)} blocchi.`}
           </p>
           <div className="variants">
             {group.variants.map((p, vi) => {
@@ -438,10 +545,7 @@ export function Composer() {
               const rest = p.changes.slice(1);
               return (
                 <div key={vi} className={`variant ${vi === 0 ? 'variant--first' : ''}`}>
-                  <span className="variant__n">
-                    {vi === 0 ? 'Consigliato' : `Variante ${vi + 1}`}
-                    {!p.after.inZone && ' · quasi'}
-                  </span>
+                  <span className="variant__n">{vi === 0 ? 'Consigliato' : `Variante ${vi + 1}`}</span>
                   <span className="variant__g">
                     {main.deltaGrams > 0 ? '+' : '−'}
                     {n0(Math.abs(main.deltaGrams))} g
@@ -464,7 +568,7 @@ export function Composer() {
                     ))}
                   </ul>
                   <button className="variant__apply" onClick={() => applyPlan(p)}>
-                    Applica
+                    Metti nel piatto
                   </button>
                 </div>
               );
@@ -473,7 +577,7 @@ export function Composer() {
 
           {tweaks.length > 0 && (
             <>
-              <h3 className="h3">Oppure un ritocco alla volta{tweakTarget !== target && ` · a ${n1(tweakTarget)} bl`}</h3>
+              <h3 className="h3">Oppure un alimento alla volta</h3>
               {tweaks.map((a) => (
                 <div key={a.macro} className="tweak">
                   <p className="tweak__need">
@@ -495,7 +599,13 @@ export function Composer() {
                             {o.foodName}
                             {o.portionHint && <small> = {o.portionHint}</small>}
                           </span>
-                          <span className="tweak__after">{o.inZoneAfter ? 'Zona' : MACROS.filter((m) => o.after[m] !== 'ok').map((m) => `${MACRO_SHORT[m]}${o.after[m] === 'low' ? '↓' : '↑'}`).join(' ')}</span>
+                          <span className="tweak__after">
+                            {o.inZoneAfter
+                              ? 'pari'
+                              : MACROS.filter((m) => o.after[m] !== 'ok')
+                                  .map((m) => `${MACRO_SHORT[m]}${o.after[m] === 'low' ? '↓' : '↑'}`)
+                                  .join(' ')}
+                          </span>
                         </button>
                       );
                     })}
@@ -513,10 +623,6 @@ export function Composer() {
         </section>
       )}
 
-      {totals.missing.length > 0 && (
-        <p className="muted small">{totals.missing.length} alimenti non più in archivio, ignorati nei calcoli.</p>
-      )}
-
       {picking && (
         <FoodPicker
           foods={foods}
@@ -531,3 +637,4 @@ export function Composer() {
     </div>
   );
 }
+

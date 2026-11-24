@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { db } from '../../db/schema';
 import { exportBackup, parseBackup, restoreBackup, type Backup } from '../../db/backup';
 import { SEED_FOODS } from '../../data/seed-foods';
-import { DIET_LABEL, dailyBlocks, type Diet, type Profile } from '../../domain/profile/types';
-import { targetGrams } from '../../domain/zone/blocks';
+import { DIET_LABEL, dailyKcalOf, dayBudget, type Diet, type Profile } from '../../domain/profile/types';
+import { ACTIVITY, GOAL, bmr, tdee, type Activity, type Goal, type Sex } from '../../domain/profile/energy';
 import { sortByName, useFoods, useProfiles } from '../../app/data';
-import { n1 } from '../../ui/format';
+import { n0, n1 } from '../../ui/format';
 
 function Num({
   label,
@@ -38,12 +38,138 @@ function Num({
   );
 }
 
+/** Campo numerico testuale (virgola ok) che salva quando esci dal campo. */
+function NumText({
+  id,
+  label,
+  value,
+  unit,
+  onCommit,
+}: {
+  id: string;
+  label: string;
+  value: number | undefined;
+  unit: string;
+  onCommit: (v: number | undefined) => void;
+}) {
+  const [text, setText] = useState(value ? String(value).replace('.', ',') : '');
+  useEffect(() => setText(value ? String(value).replace('.', ',') : ''), [value]);
+  return (
+    <label className="field field--num" htmlFor={id}>
+      <span>{label}</span>
+      <span className="unitbox">
+        <input
+          id={id}
+          inputMode="decimal"
+          value={text}
+          placeholder="—"
+          onChange={(e) => setText(e.target.value.replace(/[^0-9.,]/g, ''))}
+          onBlur={() => {
+            const v = Number(text.replace(',', '.'));
+            onCommit(text.trim() && Number.isFinite(v) && v > 0 ? v : undefined);
+          }}
+        />
+        <small>{unit}</small>
+      </span>
+    </label>
+  );
+}
+
+function Energy({ p }: { p: Profile }) {
+  const save = (patch: Partial<Profile>) => db.profiles.update(p.id, patch);
+  const body = p.body;
+  const setBody = (patch: Partial<NonNullable<Profile['body']>>) => {
+    // Il sesso resta vuoto finché non lo scegli: serve alla formula, non lo indoviniamo.
+    const next = { age: 0, weightKg: 0, heightCm: 0, ...body, ...patch } as NonNullable<Profile['body']>;
+    void save({ body: next });
+  };
+  const complete = !!body && !!body.sex && body.age > 0 && body.weightKg > 0 && body.heightCm > 0;
+  const activity = p.activity ?? 'leggero';
+  const goal = p.goal ?? 'mantenere';
+  const kcal = dailyKcalOf(p);
+
+  return (
+    <>
+      <h3 className="h3">Fabbisogno</h3>
+      <div className="seg seg--inline" role="radiogroup" aria-label="Sesso">
+        {(['m', 'f'] as Sex[]).map((x) => (
+          <button
+            key={x}
+            role="radio"
+            aria-checked={body?.sex === x}
+            className={`seg__btn ${body?.sex === x ? 'is-on' : ''}`}
+            onClick={() => setBody({ sex: x })}
+          >
+            {x === 'm' ? 'Uomo' : 'Donna'}
+          </button>
+        ))}
+      </div>
+      <div className="grid3">
+        <NumText id={`${p.id}-age`} label="Età" unit="anni" value={body?.age || undefined} onCommit={(v) => setBody({ age: v ?? 0 })} />
+        <NumText id={`${p.id}-w`} label="Peso" unit="kg" value={body?.weightKg || undefined} onCommit={(v) => setBody({ weightKg: v ?? 0 })} />
+        <NumText id={`${p.id}-h`} label="Altezza" unit="cm" value={body?.heightCm || undefined} onCommit={(v) => setBody({ heightCm: v ?? 0 })} />
+      </div>
+      <label className="field">
+        <span>Attività</span>
+        <select value={activity} onChange={(e) => save({ activity: e.target.value as Activity })}>
+          {(Object.keys(ACTIVITY) as Activity[]).map((a) => (
+            <option key={a} value={a}>
+              {ACTIVITY[a].label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Obiettivo</span>
+        <select value={goal} onChange={(e) => save({ goal: e.target.value as Goal })}>
+          {(Object.keys(GOAL) as Goal[]).map((g) => (
+            <option key={g} value={g}>
+              {GOAL[g].label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {complete && (
+        <p className="calc">
+          Metabolismo basale <strong>{n0(bmr(body!))} kcal</strong> · con l’attività <strong>{n0(tdee(body!, activity))} kcal</strong>
+          {goal !== 'mantenere' && (
+            <>
+              {' '}
+              · obiettivo <strong>{n0(tdee(body!, activity) * GOAL[goal].factor)} kcal</strong>
+            </>
+          )}
+        </p>
+      )}
+      <NumText
+        id={`${p.id}-kcal`}
+        label="Oppure calorie al giorno, a mano (hanno la precedenza)"
+        unit="kcal"
+        value={p.dailyKcal}
+        onCommit={(v) => save({ dailyKcal: v })}
+      />
+      <p className="calc">
+        {kcal ? (
+          <>
+            Budget: <strong>{n0(kcal)} kcal = {n1(dayBudget(p))} blocchi</strong> al giorno (1 blocco = 91 kcal).
+          </>
+        ) : (
+          <>Inserisci età, peso e altezza, oppure le calorie a mano.</>
+        )}
+      </p>
+      <div className="nums">
+        <Num label="Pasti al giorno" value={p.mealsPerDay} min={1} onChange={(v) => save({ mealsPerDay: v })} />
+        <Num label="Spuntini al giorno" value={p.snacksPerDay} onChange={(v) => save({ snacksPerDay: v })} />
+      </div>
+      <p className="muted small">Servono solo a dimensionare i suggerimenti: puoi mangiare quando vuoi.</p>
+    </>
+  );
+}
+
 function ProfileCard({ p }: { p: Profile }) {
   const foods = useFoods() ?? [];
   const [adding, setAdding] = useState('');
   const [name, setName] = useState(p.name);
   const save = (patch: Partial<Profile>) => db.profiles.update(p.id, patch);
-  const meal = targetGrams(p.blocksPerMeal);
   const excluded = p.excludedFoodIds.map((id) => foods.find((f) => f.id === id)).filter(Boolean);
 
   return (
@@ -57,7 +183,7 @@ function ProfileCard({ p }: { p: Profile }) {
           aria-label="Nome profilo"
         />
         <span className="card__total">
-          <strong>{n1(dailyBlocks(p))}</strong> blocchi/giorno
+          <strong>{n1(dayBudget(p))}</strong> blocchi/giorno
         </span>
       </div>
 
@@ -72,18 +198,9 @@ function ProfileCard({ p }: { p: Profile }) {
         </select>
       </label>
 
-      <div className="nums">
-        <Num label="Blocchi per pasto" value={p.blocksPerMeal} step={0.5} min={0.5} onChange={(v) => save({ blocksPerMeal: v })} />
-        <Num label="Pasti al giorno" value={p.mealsPerDay} min={1} onChange={(v) => save({ mealsPerDay: v })} />
-        <Num label="Blocchi per spuntino" value={p.blocksPerSnack} step={0.5} onChange={(v) => save({ blocksPerSnack: v })} />
-        <Num label="Spuntini al giorno" value={p.snacksPerDay} onChange={(v) => save({ snacksPerDay: v })} />
-      </div>
-      <p className="muted small">
-        Un pasto da {n1(p.blocksPerMeal)} blocchi = {n1(meal.protein)} g proteine, {n1(meal.carbs)} g carboidrati,{' '}
-        {n1(meal.fat)} g grassi.
-      </p>
+      <Energy p={p} />
 
-      <h3 className="h3">Tolleranza (± blocchi)</h3>
+      <h3 className="h3">Tolleranza per pasto (± blocchi; sulla giornata vale il doppio)</h3>
       <div className="nums">
         <Num label="Proteine" value={p.tolerance.protein} step={0.25} onChange={(v) => save({ tolerance: { ...p.tolerance, protein: v } })} />
         <Num label="Carboidrati" value={p.tolerance.carbs} step={0.25} onChange={(v) => save({ tolerance: { ...p.tolerance, carbs: v } })} />
@@ -275,7 +392,7 @@ export function ProfilesScreen() {
       ))}
       <BackupSection />
       <p className="muted small">
-        Blocchi di partenza (4 e 3 per pasto) da correggere: dipendono da massa magra, attività e obiettivo.
+        Il budget è una stima (Mifflin–St Jeor): verifica dopo due o tre settimane con il peso reale e correggi.
       </p>
     </div>
   );
