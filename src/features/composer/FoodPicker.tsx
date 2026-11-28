@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Food } from '../../domain/food/types';
 import type { Profile } from '../../domain/profile/types';
-import { netCarbs } from '../../domain/zone/blocks';
 import { newId, whyNotAllowed } from '../../app/data';
 import { db } from '../../db/schema';
 import { FoodForm } from '../foods/FoodForm';
@@ -9,9 +8,9 @@ import { ScanButton } from '../scan/ScanButton';
 import { readingNotice } from '../scan/notice';
 import type { LabelReading } from '../../domain/food/label';
 import { searchFoods } from '../../domain/food/search';
+import { macroProfile, miniBlockGrams, scaleGrams } from '../../domain/food/profile';
 import { SourceBadge } from '../../ui/SourceBadge';
 import { MacroSig } from '../../ui/MacroSig';
-import { n1 } from '../../ui/format';
 
 
 export function FoodPicker({
@@ -119,10 +118,17 @@ export function FoodPicker({
               <span className="pick__meta">
                 {why ?? (
                   <>
-                    <span className="c-protein">P {n1(f.per100.protein)}</span>
-                    <span className="c-carbs">C {n1(netCarbs(f.per100, f.carbBasis))}</span>
-                    <span className="c-fat">G {n1(f.per100.fat)}</span>
-                    <span className="muted">/100 g</span>
+                    {(() => {
+                      const g = miniBlockGrams(f);
+                      const top = macroProfile(f).dominant;
+                      return (['protein', 'carbs', 'fat'] as const).map((m) => (
+                        <span key={m} className={m === top ? 'is-top' : ''}>
+                          {m === 'protein' ? 'P' : m === 'carbs' ? 'C' : 'G'}{' '}
+                          {g[m] === null ? '—' : `${String(scaleGrams(g[m]!)).replace('.', ',')} g`}
+                        </span>
+                      ));
+                    })()}
+                    <span className="muted">per mini-blocco</span>
                     {f.portion && (
                       <span className="muted">
                         · {f.portion.label} {f.portion.grams} g

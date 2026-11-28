@@ -21,3 +21,20 @@ describe('macro forte di un alimento', () => {
     expect(s.protein + s.carbs + s.fat).toBeCloseTo(1, 10);
   });
 });
+
+describe('grammi per mini-blocco', async () => {
+  const { miniBlockGrams, scaleGrams } = await import('./profile');
+  const food = (id: string) => SEED_FOODS.find((f) => f.id === id)!;
+  it('planted.kebab: 7 g di proteine in ~32 g', () => {
+    expect(miniBlockGrams(food('planted-kebab')).protein).toBeCloseTo(31.8, 1);
+  });
+  it('riso crudo: 9 g di carboidrati in ~11,5 g', () => {
+    expect(miniBlockGrams(food('riso-crudo')).carbs).toBeCloseTo(11.54, 2);
+  });
+  it('olio: 1,5 g di grassi in 1,5 g', () => {
+    expect(scaleGrams(miniBlockGrams(food('olio-evo')).fat!)).toBe(1.5);
+  });
+  it('macro quasi assente: nessun valore', () => {
+    expect(miniBlockGrams(food('olio-evo')).protein).toBeNull();
+  });
+});

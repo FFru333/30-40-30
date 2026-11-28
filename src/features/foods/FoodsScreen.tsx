@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { db } from '../../db/schema';
 import type { Food, Source } from '../../domain/food/types';
-import { netCarbs } from '../../domain/zone/blocks';
+import { MACROS, type Macro } from '../../domain/zone/blocks';
+import { macroProfile, miniBlockGrams, scaleGrams, MINI_BLOCK } from '../../domain/food/profile';
 import { newId, useFoods } from '../../app/data';
 import { searchFoods } from '../../domain/food/search';
 import { SourceBadge } from '../../ui/SourceBadge';
 import { MacroSig } from '../../ui/MacroSig';
-import { n0, n1 } from '../../ui/format';
+import { MACRO_LABEL, MACRO_SHORT, n1 } from '../../ui/format';
 import { FoodForm } from './FoodForm';
 import { ScanButton } from '../scan/ScanButton';
 import { readingNotice } from '../scan/notice';
@@ -28,14 +29,21 @@ export function FoodsScreen() {
   const foods = useFoods();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('tutti');
+  /** Ordina per grammi necessari a un mini-blocco di questo macro (i più concentrati prima). */
+  const [by, setBy] = useState<Macro | null>(null);
   const [editing, setEditing] = useState<Food | null>(null);
   const [scanInfo, setScanInfo] = useState<{ notice: string; flagged: LabelReading['unreadable'] } | null>(null);
 
   const list = useMemo(() => {
-    return searchFoods(foods ?? [], q).filter(
+    const base = searchFoods(foods ?? [], q).filter(
       (f) => filter === 'tutti' || (filter === 'piatti' ? !!f.ingredients : f.source === filter),
     );
-  }, [foods, q, filter]);
+    if (!by) return base;
+    // Solo gli alimenti che sono davvero una fonte di quel macro, dal più concentrato.
+    return base
+      .filter((f) => macroProfile(f).share[by] >= 0.35 && miniBlockGrams(f)[by] !== null)
+      .sort((a, b) => miniBlockGrams(a)[by]! - miniBlockGrams(b)[by]!);
+  }, [foods, q, filter, by]);
 
   if (!foods) return <div className="loading">Carico…</div>;
 
@@ -109,24 +117,44 @@ export function FoodsScreen() {
           </button>
         ))}
       </div>
-      <ul className="foodlist">
-        {list.map((f) => (
-          <li key={f.id}>
-            <button className="food" onClick={() => setEditing(f)}>
-              <MacroSig food={f} label />
-              <span className="food__name">
-                {f.name} <SourceBadge food={f} />
-                {f.ingredients && <span className="badge">piatto</span>}
-              </span>
-              <span className="food__nums">
-                <span className="c-protein">P {n1(f.per100.protein)}</span>
-                <span className="c-carbs">C {n1(netCarbs(f.per100, f.carbBasis))}</span>
-                <span className="c-fat">G {n1(f.per100.fat)}</span>
-                <span className="muted">{n0(f.per100.kcal)} kcal</span>
-              </span>
+      <div className="minihead">
+        <p className="minihead__t">
+          Grammi per <strong>1 mini-blocco</strong>: {MINI_BLOCK.protein} g proteine · {MINI_BLOCK.carbs} g carboidrati ·{' '}
+          {n1(MINI_BLOCK.fat)} g grassi. Ordina per:
+        </p>
+        <div className="chips">
+          {MACROS.map((m) => (
+            <button key={m} className={`chip ${by === m ? 'is-on' : ''}`} onClick={() => setBy(by === m ? null : m)}>
+              {MACRO_LABEL[m]}
             </button>
-          </li>
-        ))}
+          ))}
+        </div>
+      </div>
+      <ul className="foodlist">
+        {list.map((f) => {
+          const g = miniBlockGrams(f);
+          const top = by ?? macroProfile(f).dominant;
+          return (
+            <li key={f.id}>
+              <button className="food" onClick={() => setEditing(f)}>
+                <MacroSig food={f} label />
+                <span className="food__name">
+                  {f.name} <SourceBadge food={f} />
+                  {f.ingredients && <span className="badge">piatto</span>}
+                </span>
+                <span className="food__mini" aria-label="Grammi per un mini-blocco">
+                  {MACROS.map((m) => (
+                    <span key={m} className={m === top ? 'is-top' : ''}>
+                      <small>{MACRO_SHORT[m]}</small>
+                      {g[m] === null ? '—' : `${String(scaleGrams(g[m]!)).replace('.', ',')} g`}
+                    </span>
+                  ))}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+        {list.length === 0 && <li className="empty">Nessun alimento.</li>}
       </ul>
     </div>
   );

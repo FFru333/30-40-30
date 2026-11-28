@@ -202,6 +202,7 @@ export function Composer() {
     await db.days.put({ ...cur, meals: [...cur.meals, { id: newId('pasto'), at, items }] });
     setItems(() => []);
     setJustLogged(true);
+    window.dispatchEvent(new Event('mari-maybe'));
     window.setTimeout(() => setJustLogged(false), 2200);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

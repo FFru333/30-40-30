@@ -18,7 +18,7 @@ export function MacroSig({ food, label = false, size = 'sm' }: { food: Food; lab
   const { share, dominant } = macroProfile(food);
   const aria = `${DOMINANT_LABEL[dominant]}: ${MACROS.map((m) => `${MACRO_SHORT[m]} ${pct(share[m])}`).join(', ')}`;
   return (
-    <span className={`sig sig--${size} sig--${dominant}`} role="img" aria-label={aria} title={aria}>
+    <span className={`sig sig--${size} sig--${dominant}`} aria-hidden="true" title={aria}>
       <span className="sig__bars" aria-hidden="true">
         {MACROS.map((m) => (
           <span key={m} className={`sig__bar ${m === dominant ? 'is-top' : ''}`}>

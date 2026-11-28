@@ -1860,3 +1860,106 @@ html {
 .card .field {
   margin-top: 10px;
 }
+
+/* ---------- Mini-blocchi ---------- */
+
+.minihead {
+  margin-top: 6px;
+}
+
+.minihead__t {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.minihead__t strong {
+  color: var(--ink);
+}
+
+.food__mini,
+.pick__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.food__mini span,
+.pick__meta span {
+  white-space: nowrap;
+}
+
+.food__mini small {
+  margin-right: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.food__mini .is-top,
+.pick__meta .is-top {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---------- La Mari ---------- */
+
+.mari {
+  position: fixed;
+  left: max(18px, env(safe-area-inset-left, 0px));
+  right: max(18px, env(safe-area-inset-right, 0px));
+  bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom, 0px) + 14px);
+  z-index: 30;
+  max-width: 520px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 10px 16px 18px;
+  border-radius: 22px;
+  background: var(--ink);
+  color: var(--on-ink);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  animation: rise 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  cursor: pointer;
+}
+
+.mari p {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.mari__dots {
+  display: flex;
+  gap: 4px;
+}
+
+.mari__dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--on-ink);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.mari__dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.mari__dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.mari__x {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+}

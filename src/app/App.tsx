@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
+import { MariPopup } from '../ui/Mari';
 import { Composer } from '../features/composer/Composer';
 import { FoodsScreen } from '../features/foods/FoodsScreen';
 import { ProfilesScreen } from '../features/profiles/ProfilesScreen';
@@ -48,6 +49,7 @@ export function App() {
         {route === 'alimenti' && <FoodsScreen />}
         {route === 'profili' && <ProfilesScreen />}
       </main>
+      <MariPopup />
       <nav className="tabs" aria-label="Sezioni">
         {ROUTES.map((r) => (
           <a key={r.path} href={`#${r.path}`} className={`tabs__a ${route === r.path ? 'is-on' : ''}`} aria-current={route === r.path ? 'page' : undefined}>
