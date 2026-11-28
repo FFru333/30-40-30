@@ -8,6 +8,8 @@ export type Source = 'etichetta' | 'off' | 'stima';
  */
 export type CarbBasis = 'eu' | 'us_total';
 
+export type ZoneRating = 'ottimo' | 'discreto' | 'scarso';
+
 export type DietTag = 'vegano' | 'vegetariano' | 'pesce' | 'carne';
 
 export interface Nutrients {
@@ -43,6 +45,13 @@ export interface Food {
   sourceNote?: string;
   /** Presente se l'alimento è un piatto composto da altri alimenti. */
   ingredients?: Ingredient[];
+  /**
+   * Qualità secondo la Zona. Carboidrati: verdura, frutta, legumi, avena = ottimo (favorevoli);
+   * pane, pasta, riso, patate, zuccheri = scarso (sfavorevoli, "dose da condimento").
+   * Proteine magre e pesce = ottimo; carni grasse e insaccati = scarso.
+   * Grassi monoinsaturi (olio d'oliva, mandorle, avocado) = ottimo; saturi e omega-6 = scarso.
+   */
+  zone?: ZoneRating;
   /** false: non proporlo nei consigli di bilanciamento (zucchero, alcol, salse…). */
   suggest?: boolean;
   /** Alimento dell'archivio iniziale (non creato dall'utente). */

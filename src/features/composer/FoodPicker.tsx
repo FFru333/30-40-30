@@ -10,6 +10,7 @@ import type { LabelReading } from '../../domain/food/label';
 import { searchFoods } from '../../domain/food/search';
 import { macroProfile, miniBlockGrams, scaleGrams } from '../../domain/food/profile';
 import { SourceBadge } from '../../ui/SourceBadge';
+import { ZoneTag } from '../../ui/ZoneTag';
 import { MacroSig } from '../../ui/MacroSig';
 
 
@@ -112,7 +113,7 @@ export function FoodPicker({
             <button className="pick" disabled={!!why} onClick={() => onPick(f)}>
               <MacroSig food={f} label />
               <span className="pick__name">
-                {f.name} <SourceBadge food={f} />
+                {f.name} <SourceBadge food={f} /> <ZoneTag food={f} />
                 {f.ingredients && <span className="badge">piatto</span>}
               </span>
               <span className="pick__meta">

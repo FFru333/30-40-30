@@ -9,6 +9,8 @@ export interface LoggedMeal {
   /** Ora di registrazione, ISO. */
   at: string;
   items: Ingredient[];
+  /** Indice nello schema della giornata (0 = colazione…). */
+  slot?: number;
 }
 
 export interface DayLog {

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { db } from '../../db/schema';
 import { exportBackup, parseBackup, restoreBackup, type Backup } from '../../db/backup';
 import { SEED_FOODS } from '../../data/seed-foods';
-import { DIET_LABEL, dailyKcalOf, dayBudget, type Diet, type Profile } from '../../domain/profile/types';
-import { ACTIVITY, GOAL, bmr, tdee, type Activity, type Goal, type Sex } from '../../domain/profile/energy';
+import { DIET_LABEL, bodyFatOf, dayBudget, methodOf, slotsOf, zoneCalcOf, type Diet, type Profile } from '../../domain/profile/types';
+import { ACTIVITY, GOAL, ZONE_ACTIVITY, bmr, targetKcal, tdee, type Activity, type Goal, type Sex } from '../../domain/profile/energy';
 import { sortByName, useFoods, useProfiles } from '../../app/data';
 import { n0, n1 } from '../../ui/format';
 
@@ -79,18 +79,47 @@ function Energy({ p }: { p: Profile }) {
   const save = (patch: Partial<Profile>) => db.profiles.update(p.id, patch);
   const body = p.body;
   const setBody = (patch: Partial<NonNullable<Profile['body']>>) => {
-    // Il sesso resta vuoto finché non lo scegli: serve alla formula, non lo indoviniamo.
+    // Il sesso resta vuoto finché non lo scegli: serve alle formule, non lo indoviniamo.
     const next = { age: 0, weightKg: 0, heightCm: 0, ...body, ...patch } as NonNullable<Profile['body']>;
     void save({ body: next });
   };
+  const method = methodOf(p);
   const complete = !!body && !!body.sex && body.age > 0 && body.weightKg > 0 && body.heightCm > 0;
   const activity = p.activity ?? 'leggero';
   const goal = p.goal ?? 'mantenere';
-  const kcal = dailyKcalOf(p);
+  const bf = bodyFatOf(p);
+  const zc = zoneCalcOf(p);
+  const kcalCalc = complete ? targetKcal(body!, activity, goal) : null;
+  const budget = dayBudget(p);
+  const slots = slotsOf(p);
 
   return (
     <>
-      <h3 className="h3">Fabbisogno</h3>
+      <h3 className="h3">Blocchi al giorno</h3>
+      <div className="seg seg--inline" role="radiogroup" aria-label="Metodo">
+        {(
+          [
+            ['zona', 'Metodo Zona'],
+            ['calorie', 'Da calorie'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            role="radio"
+            aria-checked={method === k}
+            className={`seg__btn ${method === k ? 'is-on' : ''}`}
+            onClick={() => save({ method: k })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="muted small">
+        {method === 'zona'
+          ? 'Come Sears: massa magra × indice di attività = grammi di proteine al giorno; diviso 7 = blocchi (minimo 11).'
+          : 'Calorie della giornata ÷ 91 (le kcal di un blocco). Dal metabolismo, o scritte a mano.'}
+      </p>
+
       <div className="seg seg--inline" role="radiogroup" aria-label="Sesso">
         {(['m', 'f'] as Sex[]).map((x) => (
           <button
@@ -105,62 +134,115 @@ function Energy({ p }: { p: Profile }) {
         ))}
       </div>
       <div className="grid3">
-        <NumText id={`${p.id}-age`} label="Età" unit="anni" value={body?.age || undefined} onCommit={(v) => setBody({ age: v ?? 0 })} />
         <NumText id={`${p.id}-w`} label="Peso" unit="kg" value={body?.weightKg || undefined} onCommit={(v) => setBody({ weightKg: v ?? 0 })} />
         <NumText id={`${p.id}-h`} label="Altezza" unit="cm" value={body?.heightCm || undefined} onCommit={(v) => setBody({ heightCm: v ?? 0 })} />
+        <NumText id={`${p.id}-age`} label="Età" unit="anni" value={body?.age || undefined} onCommit={(v) => setBody({ age: v ?? 0 })} />
       </div>
-      <label className="field">
-        <span>Attività</span>
-        <select value={activity} onChange={(e) => save({ activity: e.target.value as Activity })}>
-          {(Object.keys(ACTIVITY) as Activity[]).map((a) => (
-            <option key={a} value={a}>
-              {ACTIVITY[a].label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>Obiettivo</span>
-        <select value={goal} onChange={(e) => save({ goal: e.target.value as Goal })}>
-          {(Object.keys(GOAL) as Goal[]).map((g) => (
-            <option key={g} value={g}>
-              {GOAL[g].label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {complete && (
-        <p className="calc">
-          Metabolismo basale <strong>{n0(bmr(body!))} kcal</strong> · con l’attività <strong>{n0(tdee(body!, activity))} kcal</strong>
-          {goal !== 'mantenere' && (
+
+      {method === 'zona' ? (
+        <>
+          <NumText
+            id={`${p.id}-bf`}
+            label="Grasso corporeo, se lo conosci (plicometria, bilancia)"
+            unit="%"
+            value={p.bodyFatPct}
+            onCommit={(v) => save({ bodyFatPct: v })}
+          />
+          {!p.bodyFatPct && (
             <>
-              {' '}
-              · obiettivo <strong>{n0(tdee(body!, activity) * GOAL[goal].factor)} kcal</strong>
+              <p className="muted small">Altrimenti lo stimo dalle circonferenze, con il metro da sarta:</p>
+              <div className="grid3">
+                <NumText id={`${p.id}-waist`} label="Vita (ombelico)" unit="cm" value={p.waistCm} onCommit={(v) => save({ waistCm: v })} />
+                <NumText id={`${p.id}-neck`} label="Collo" unit="cm" value={p.neckCm} onCommit={(v) => save({ neckCm: v })} />
+                {body?.sex === 'f' && (
+                  <NumText id={`${p.id}-hips`} label="Fianchi" unit="cm" value={p.hipsCm} onCommit={(v) => save({ hipsCm: v })} />
+                )}
+              </div>
             </>
           )}
-        </p>
+          <label className="field">
+            <span>Indice di attività</span>
+            <select value={p.zoneActivity ?? 1.3} onChange={(e) => save({ zoneActivity: Number(e.target.value) })}>
+              {ZONE_ACTIVITY.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="calc">
+            {zc ? (
+              <>
+                Grasso {n1(bf!.pct)}%{bf!.estimated && ' (stima)'} · massa magra <strong>{n1(zc.leanKg)} kg</strong> ×{' '}
+                {String(p.zoneActivity ?? 1.3).replace('.', ',')} = <strong>{n0(zc.proteinG)} g di proteine</strong> ={' '}
+                <strong>{zc.blocks} blocchi</strong> al giorno (≈ {n0(zc.blocks * 91)} kcal).
+              </>
+            ) : (
+              <>Servono sesso, peso e il grasso corporeo (o vita e collo{body?.sex === 'f' ? ' e fianchi' : ''}).</>
+            )}
+          </p>
+        </>
+      ) : (
+        <>
+          <label className="field">
+            <span>Attività</span>
+            <select value={activity} onChange={(e) => save({ activity: e.target.value as Activity })}>
+              {(Object.keys(ACTIVITY) as Activity[]).map((a) => (
+                <option key={a} value={a}>
+                  {ACTIVITY[a].label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Obiettivo</span>
+            <select value={goal} onChange={(e) => save({ goal: e.target.value as Goal })}>
+              {(Object.keys(GOAL) as Goal[]).map((g) => (
+                <option key={g} value={g}>
+                  {GOAL[g].label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {complete && (
+            <p className="calc">
+              Basale <strong>{n0(bmr(body!))} kcal</strong> · con l’attività <strong>{n0(tdee(body!, activity))} kcal</strong>
+              {goal !== 'mantenere' && (
+                <>
+                  {' '}
+                  · obiettivo <strong>{n0(kcalCalc!)} kcal</strong>
+                </>
+              )}
+            </p>
+          )}
+          <NumText
+            id={`${p.id}-kcal`}
+            label="Oppure calorie al giorno, a mano (hanno la precedenza)"
+            unit="kcal"
+            value={p.dailyKcal}
+            onCommit={(v) => save({ dailyKcal: v })}
+          />
+        </>
       )}
-      <NumText
-        id={`${p.id}-kcal`}
-        label="Oppure calorie al giorno, a mano (hanno la precedenza)"
-        unit="kcal"
-        value={p.dailyKcal}
-        onCommit={(v) => save({ dailyKcal: v })}
-      />
-      <p className="calc">
-        {kcal ? (
-          <>
-            Budget: <strong>{n0(kcal)} kcal = {n1(dayBudget(p))} blocchi</strong> al giorno (1 blocco = 91 kcal).
-          </>
-        ) : (
-          <>Inserisci età, peso e altezza, oppure le calorie a mano.</>
-        )}
-      </p>
+
+      <div className="schedule">
+        <p className="schedule__total">
+          <strong>{n1(budget)}</strong> blocchi al giorno
+        </p>
+        <ol className="schedule__list">
+          {slots.map((sl, i) => (
+            <li key={i} className={sl.snack ? 'is-snack' : ''}>
+              <span>{sl.name}</span>
+              <strong>{n1(sl.blocks)}</strong>
+            </li>
+          ))}
+        </ol>
+      </div>
       <div className="nums">
         <Num label="Pasti al giorno" value={p.mealsPerDay} min={1} onChange={(v) => save({ mealsPerDay: v })} />
         <Num label="Spuntini al giorno" value={p.snacksPerDay} onChange={(v) => save({ snacksPerDay: v })} />
       </div>
-      <p className="muted small">Servono solo a dimensionare i suggerimenti: puoi mangiare quando vuoi.</p>
+      <p className="muted small">Non passare più di 5 ore senza mangiare: gli spuntini servono a questo.</p>
     </>
   );
 }

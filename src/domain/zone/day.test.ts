@@ -22,25 +22,25 @@ describe('giornata', () => {
     expect(s.left).toBeCloseTo(33 - 11.37, 1);
   });
 
-  it('a cena "Bilancia" compensa la pizza di pranzo con proteine e grassi', () => {
+  it('a cena "Bilancia la giornata" compensa la pizza di pranzo, senza togliere niente', () => {
     const base = eatenTotals([{ id: 'a', at: '', items: [{ foodId: 'pizza-margherita', grams: 330 }] }], lookup);
-    const ps = dayPlans({ items: [], lookup, targetBlocks: 0, tolerance: tol, pool: SEED_FOODS, base, budget: 33 });
-    const adapt = ps.find((p) => p.kind === 'adapt')!;
-    expect(adapt.after.inZone).toBe(true);
-    expect(adapt.changes.every((c) => c.deltaGrams > 0)).toBe(true);
-    const day = dayStatus(totalsWith(adapt.items, lookup, base), 33, tol);
-    expect(day.balance.inZone).toBe(true);
+    const [p] = dayPlans({ items: [], lookup, targetBlocks: 0, tolerance: tol, pool: SEED_FOODS, base });
+    expect(p!.kind).toBe('day');
+    expect(p!.after.inZone).toBe(true);
+    expect(p!.changes.every((c) => c.deltaGrams > 0)).toBe(true);
+    expect(dayStatus(totalsWith(p!.items, lookup, base), 33, tol).balance.inZone).toBe(true);
   });
 
-  it('"Chiudi la giornata" porta tutti e tre i macro al budget', () => {
-    const base = eatenTotals([{ id: 'a', at: '', items: [{ foodId: 'planted-kebab', grams: 160 }, { foodId: 'riso-crudo', grams: 70 }] }], lookup);
-    const groups = planGroups(
-      { items: [], lookup, targetBlocks: 0, tolerance: tol, pool: SEED_FOODS, base },
-      3,
-      (i) => dayPlans({ ...i, budget: 20 }),
-    );
-    const close = groups.find((g) => g.kind === 'close')!;
-    expect(close.targetBlocks).toBe(20);
-    expect(close.variants[0]!.after.inZone).toBe(true);
+  it('giornata già pari: nessun piano', () => {
+    const base = eatenTotals([{ id: 'a', at: '', items: [{ foodId: 'x', grams: 100 }] }], () => ({
+      id: 'x', name: 'x', per100: { kcal: 0, protein: 28, carbs: 36, fiber: 0, fat: 12 }, carbBasis: 'eu', diet: 'vegano', source: 'stima',
+    }));
+    expect(dayPlans({ items: [], lookup, targetBlocks: 0, tolerance: tol, pool: SEED_FOODS, base })).toEqual([]);
+  });
+
+  it('varianti della giornata', () => {
+    const base = eatenTotals([{ id: 'a', at: '', items: [{ foodId: 'pizza-margherita', grams: 330 }] }], lookup);
+    const groups = planGroups({ items: [], lookup, targetBlocks: 0, tolerance: tol, pool: SEED_FOODS, base }, 3, dayPlans);
+    expect(groups[0]!.variants.length).toBeGreaterThanOrEqual(2);
   });
 });

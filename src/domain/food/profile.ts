@@ -21,8 +21,12 @@ export function macroProfile(food: Food): MacroProfile {
   return { share, dominant: total > 0 && share[top] >= 0.5 ? top : 'mixed' };
 }
 
-/** Unità di un mini-blocco: 7 g di proteine, 9 g di carboidrati netti, 1,5 g di grassi. */
-export const MINI_BLOCK = { protein: 7, carbs: 9, fat: 1.5 } as const;
+/**
+ * Unità di un mini-blocco: 7 g di proteine, 9 g di carboidrati netti, 3 g di grassi.
+ * Le tabelle di Sears indicano 1,5 g di grasso da aggiungere perché presumono altri 1,5 g
+ * già dentro la proteina animale; l'app conta tutto il grasso del piatto, quindi usa 3 g.
+ */
+export const MINI_BLOCK = { protein: 7, carbs: 9, fat: 3 } as const;
 
 /**
  * Grammi dell'alimento che forniscono un mini-blocco di ciascun macro.

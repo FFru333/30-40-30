@@ -26,3 +26,27 @@ describe('fabbisogno', () => {
   });
   it('senza dati: somma pasti + spuntini', () => expect(dayBudget(base)).toBe(14));
 });
+
+describe('metodo Zona', async () => {
+  const { zoneBlocks, navyBodyFat, distribute } = await import('./energy');
+  it('120 g di proteine = 17 blocchi (esempio classico)', () => {
+    // 80 kg al 11,76% di grasso → ~70,6 kg di massa magra × 1,7 = 120 g
+    expect(zoneBlocks(80, 100 * (1 - 120 / 1.7 / 80), 1.7).blocks).toBe(17);
+  });
+  it('mai sotto 11 blocchi', () => expect(zoneBlocks(45, 35, 1.1).blocks).toBe(11));
+  it('stima del grasso US Navy: uomo 180 cm, vita 85, collo 38 ≈ 16%', () => {
+    expect(navyBodyFat('m', 180, 85, 38)!).toBeCloseTo(16.1, 1);
+  });
+  it('donna senza fianchi: niente stima', () => expect(navyBodyFat('f', 165, 70, 32)).toBeNull());
+  it('distribuzione: somma esatta, spuntini da 1 o 2', () => {
+    for (const b of [11, 14, 17, 19, 25, 33]) {
+      const d = distribute(b);
+      expect(d.reduce((a, x) => a + x.blocks, 0)).toBeCloseTo(b, 6);
+      expect(d.map((x) => x.name)).toEqual(['Colazione', 'Spuntino', 'Pranzo', 'Spuntino', 'Cena']);
+    }
+    expect(distribute(14).map((x) => x.blocks)).toEqual([4, 1, 4, 1, 4]);
+    expect(distribute(17).map((x) => x.blocks)).toEqual([5, 1, 5, 1, 5]);
+    expect(distribute(16).map((x) => x.blocks)).toEqual([4, 2, 4, 2, 4]);
+    expect(distribute(13).map((x) => x.blocks)).toEqual([3, 2, 3, 2, 3]);
+  });
+});

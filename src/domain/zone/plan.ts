@@ -23,7 +23,7 @@ export interface Plan {
    * `fit`:   il piatto resta nei blocchi del profilo: si riduce ciò che eccede, poi si completa.
    * `fill`:  nessun eccesso, si completa ciò che manca.
    */
-  kind: 'adapt' | 'fit' | 'fill' | 'close';
+  kind: 'adapt' | 'fit' | 'fill' | 'day';
   targetBlocks: number;
   changes: PlanChange[];
   items: Ingredient[];
@@ -181,33 +181,20 @@ export function planGroups(input: PlanInput, n = 3, gen: (i: PlanInput) => Plan[
 }
 
 /**
- * Piani sulla giornata: `base` è quanto già mangiato, `items` il piatto di adesso.
- * - `adapt` (Bilancia): aggiungi al piatto ciò che serve perché i tre macro della
- *   giornata si allineino al più alto. Niente viene tolto.
- * - `close`: un pasto bilanciato da `mealBlocks` blocchi in più; se arriva al budget
- *   chiude la giornata.
+ * Piano sulla giornata: `base` è quanto già mangiato, `items` il piatto di adesso.
+ * `day` (Bilancia la giornata): aggiunge al piatto ciò che serve perché i tre macro
+ * della giornata si allineino al più alto. Niente viene tolto.
  */
-export function dayPlans(input: PlanInput & { budget: number; mealBlocks?: number }): Plan[] {
-  const { items, lookup, tolerance, budget } = input;
+export function dayPlans(input: PlanInput): Plan[] {
+  const { items, lookup, tolerance } = input;
   const totals = totalsWith(items, lookup, input.base);
   const level = Math.max(totals.protein / 7, totals.carbs / 9, totals.fat / 3);
-  const out: Plan[] = [];
-  const protect = new Set<string>();
-  const make = (kind: Plan['kind'], target: number, next: Ingredient[]) => {
-    const after = evaluate(totalsWith(next, lookup, input.base), target, tolerance);
-    const changes = diff(items, next, lookup);
-    if (changes.length) out.push({ kind, targetBlocks: target, changes, items: next, after });
-  };
-  const now = evaluate(totals, level, tolerance);
-  if (!now.inZone && level > 0) {
-    const t = roundUpHalf(level);
-    make('adapt', t, fillUp(input, items, t, lookup, protect));
-  }
-  // Un pasto bilanciato di dimensione normale; se basta a finire il budget, chiude la giornata.
-  const step = input.mealBlocks ?? budget;
-  const goal = Math.min(budget, roundUpHalf(level) + step);
-  if (goal - level >= 1) make('close', goal, fillUp(input, items, goal, lookup, protect));
-  return out;
+  if (level <= 0 || evaluate(totals, level, tolerance).inZone) return [];
+  const t = roundUpHalf(level);
+  const next = fillUp(input, items, t, lookup, new Set());
+  const after = evaluate(totalsWith(next, lookup, input.base), t, tolerance);
+  const changes = diff(items, next, lookup);
+  return changes.length ? [{ kind: 'day', targetBlocks: t, changes, items: next, after }] : [];
 }
 
 function signature(p: Plan): string {

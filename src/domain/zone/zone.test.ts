@@ -319,3 +319,20 @@ describe('consigli sensati', () => {
     for (const bad of ['zucchero', 'miele', 'birra', 'vino', 'marmellata']) expect(ids).not.toContain(bad);
   });
 });
+
+describe('qualità Zona', async () => {
+  const { ZONE_RATING, SEED_FOODS: all } = await import('../../data/seed-foods');
+  it('ogni valutazione punta a un alimento esistente', () => {
+    const ids = new Set(all.map((f) => f.id));
+    for (const id of Object.keys(ZONE_RATING)) expect(ids.has(id), id).toBe(true);
+  });
+  it('quasi tutto l’archivio ha una valutazione', () => {
+    const rated = all.filter((f) => f.zone).length;
+    expect(rated / all.length).toBeGreaterThan(0.9);
+  });
+  it('a parità, i consigli preferiscono carboidrati favorevoli', () => {
+    const advice = balance({ items: [{ foodId: 'pollo', grams: 120 }, { foodId: 'olio-evo', grams: 4 }], lookup, targetBlocks: 4, tolerance: tol, pool: all, maxOptions: 3 });
+    const carbs = advice.find((a) => a.macro === 'carbs')!;
+    expect(lookup(carbs.options[0]!.foodId)?.zone).not.toBe('scarso');
+  });
+});

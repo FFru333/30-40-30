@@ -2,14 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, EMPTY_DRAFT, type Draft } from '../../db/schema';
 import type { Food, Ingredient } from '../../domain/food/types';
-import { dailyKcalOf, dayBudget, type Profile } from '../../domain/profile/types';
+import { dailyKcalOf, dayBudget, slotsOf, type Profile } from '../../domain/profile/types';
 import { BLOCK_KCAL } from '../../domain/profile/energy';
 import { buildComposite } from '../../domain/food/composite';
 import { MACROS, gramsToBlocks, type MacroGrams } from '../../domain/zone/blocks';
 import { foodMacros, macroKcal, mealTotals, totalsWith } from '../../domain/zone/meal';
-import type { ZoneStatus } from '../../domain/zone/status';
+import { evaluate, type ZoneStatus } from '../../domain/zone/status';
 import { dayId, dayStatus, dayTolerance, eatenTotals, localDate, type DayLog } from '../../domain/zone/day';
-import { dayPlans, planGroups, type Plan } from '../../domain/zone/plan';
+import { dayPlans, planGroups, plans, type Plan } from '../../domain/zone/plan';
+import { macroProfile, miniBlockGrams, scaleGrams } from '../../domain/food/profile';
+import { BlockMatrix } from '../../ui/Blocks';
+import { ZoneTag } from '../../ui/ZoneTag';
 import { balance, type Advice, type Suggestion } from '../../domain/zone/balance';
 import { MacroSig } from '../../ui/MacroSig';
 import { GramsInput } from '../../ui/GramsInput';
@@ -37,12 +40,27 @@ function balanceLine(s: ZoneStatus): string {
     : `${n1(b)} ${blocchi(b)} ${MACRO_OF[w.macro]} in più rispetto agli altri.`;
 }
 
-const PLAN_TITLE: Record<Plan['kind'], string> = {
-  adapt: 'Bilancia',
-  close: 'Pasto bilanciato',
-  fill: 'Completa',
-  fit: 'Resta nei blocchi',
-};
+function planTitle(kind: Plan['kind'], slot: string, blocks: number): string {
+  if (kind === 'fill') return `Completa ${slot.toLowerCase()}`;
+  if (kind === 'adapt') return 'Tieni tutto';
+  if (kind === 'fit') return `Resta in ${n1(blocks)} blocchi`;
+  return 'Bilancia la giornata';
+}
+
+function planNote(kind: Plan['kind'], slot: string, blocks: number): string {
+  if (kind === 'fill') return `Aggiungi quello che manca: ${slot.toLowerCase()} da ${n1(blocks)} blocchi, 1:1:1.`;
+  if (kind === 'adapt') return 'Non togli niente: gli altri macro crescono fino a quello in eccesso.';
+  if (kind === 'fit') return `Riduci ciò che eccede e completa, restando nei ${n1(blocks)} blocchi di ${slot.toLowerCase()}.`;
+  return 'Conta anche i pasti già registrati: aggiungi al piatto ciò che rimette pari la giornata.';
+}
+
+/** Grammi di 1 mini-blocco del macro forte dell'alimento (per i passi −/+). */
+function miniStep(f: Food): { grams: number; macro: 'protein' | 'carbs' | 'fat' } | null {
+  const prof = macroProfile(f);
+  const m = prof.dominant === 'mixed' ? (['protein', 'carbs', 'fat'] as const).reduce((a, b) => (prof.share[b] > prof.share[a] ? b : a)) : prof.dominant;
+  const g = miniBlockGrams(f)[m];
+  return g ? { grams: g, macro: m } : null;
+}
 
 function dayLabel(date: string): string {
   const today = localDate();
@@ -74,6 +92,7 @@ export function Composer() {
   const [strategy, setStrategy] = useState<Plan['kind'] | null>(null);
   const [openTweaks, setOpenTweaks] = useState<Set<string>>(() => new Set());
   const [justLogged, setJustLogged] = useState(false);
+  const [slotSel, setSlotSel] = useState<number | null>(null);
 
   // Carica la bozza una volta, poi la salva con un piccolo ritardo.
   useEffect(() => {
@@ -116,21 +135,29 @@ export function Composer() {
   const plateT = useMemo(() => mealTotals(items, lookup), [items, foodMap]); // eslint-disable-line react-hooks/exhaustive-deps
   const plate: MacroGrams = { protein: plateT.protein, carbs: plateT.carbs, fat: plateT.fat };
   const budget = profile ? dayBudget(profile) : 0;
-  const mealBlocks = profile ? Math.max(2, Math.round((budget / (profile.mealsPerDay + profile.snacksPerDay * 0.5)) * 2) / 2) : 4;
+  // Schema della giornata e pasto in corso: il primo non ancora registrato, o quello scelto.
+  const slots = profile ? slotsOf(profile) : [];
+  const logged = new Set(meals.map((m) => m.slot).filter((x): x is number => x !== undefined));
+  const nextSlot = Math.max(0, slots.findIndex((_, i) => !logged.has(i)));
+  const activeSlot = Math.min(slotSel ?? (logged.size >= slots.length ? slots.length - 1 : nextSlot), Math.max(0, slots.length - 1));
+  const slot = slots[activeSlot] ?? { name: 'Pasto', blocks: 4, snack: false };
   const pool = useMemo(() => (foods && profile ? allowedFoods(foods, profile) : []), [foods, profile]);
   const dayTol = profile ? dayTolerance(profile.tolerance) : { protein: 1, carbs: 1, fat: 1 };
 
-  const groups = useMemo(
-    () =>
-      profile && (items.length || meals.length)
-        ? planGroups({ items, lookup, targetBlocks: 0, tolerance: dayTol, pool, base: eaten }, 5, (i) =>
-            dayPlans({ ...i, budget, mealBlocks }),
-          )
-        : [],
-    [items, meals, foodMap, profile, pool, eaten, budget, mealBlocks], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  // Controbilancia: prima il pasto (1:1:1 sui blocchi del pasto in corso), poi la giornata.
+  const groups = useMemo(() => {
+    if (!profile) return [];
+    const meal = items.length
+      ? planGroups({ items, lookup, targetBlocks: slot.blocks, tolerance: profile.tolerance, pool }, 5, plans)
+      : [];
+    const dayG = meals.length
+      ? planGroups({ items, lookup, targetBlocks: 0, tolerance: dayTol, pool, base: eaten }, 5, dayPlans)
+      : [];
+    return [...meal, ...dayG];
+  }, [items, meals, foodMap, profile, pool, eaten, slot.blocks]); // eslint-disable-line react-hooks/exhaustive-deps
   const group = groups.find((g) => g.kind === strategy) ?? groups[0];
   const tweakTarget = group?.targetBlocks ?? 0;
+  const isDay = group?.kind === 'day';
   const tweaks = useMemo(
     () =>
       profile && group
@@ -138,14 +165,14 @@ export function Composer() {
             items,
             lookup,
             targetBlocks: tweakTarget,
-            tolerance: dayTol,
+            tolerance: isDay ? dayTol : profile.tolerance,
             pool,
             maxOptions: 6,
             strict: false,
-            base: eaten,
+            base: isDay ? eaten : undefined,
           })
         : [],
-    [items, foodMap, tweakTarget, profile, pool, eaten, group], // eslint-disable-line react-hooks/exhaustive-deps
+    [items, foodMap, tweakTarget, profile, pool, eaten, group, isDay], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const totals = totalsWith(items, lookup, eaten);
@@ -169,7 +196,12 @@ export function Composer() {
   const removeAt = (idx: number) => setItems((xs) => xs.filter((_, i) => i !== idx));
 
   const add = (f: Food) => {
-    const g = f.portion?.grams ?? 100;
+    // Come con le tabelle: tanti mini-blocchi del macro forte quanti i blocchi del pasto (max 300 g).
+    const ms = miniStep(f);
+    const g =
+      ms && macroProfile(f).dominant !== 'mixed'
+        ? scaleGrams(Math.min(ms.grams * slot.blocks, 300))
+        : (f.portion?.grams ?? 100);
     setItems((xs) => {
       const i = xs.findIndex((x) => x.foodId === f.id);
       if (i >= 0) return xs.map((x, j) => (j === i ? { ...x, grams: x.grams + g } : x));
@@ -199,8 +231,9 @@ export function Composer() {
     // Per un giorno passato, registra a mezzogiorno di quel giorno.
     const at = date === localDate() ? now.toISOString() : new Date(`${date}T12:00:00`).toISOString();
     const cur = (await db.days.get(id)) ?? { id, profileId: profile.id, date, meals: [] };
-    await db.days.put({ ...cur, meals: [...cur.meals, { id: newId('pasto'), at, items }] });
+    await db.days.put({ ...cur, meals: [...cur.meals, { id: newId('pasto'), at, items, slot: activeSlot }] });
     setItems(() => []);
+    setSlotSel(null);
     setJustLogged(true);
     window.dispatchEvent(new Event('mari-maybe'));
     window.setTimeout(() => setJustLogged(false), 2200);
@@ -331,7 +364,10 @@ export function Composer() {
               const names = m.items.map((i) => foodMap.get(i.foodId)?.name ?? '—');
               return (
                 <li key={m.id} className="meal">
-                  <span className="meal__time">{timeOf(m.at)}</span>
+                  <span className="meal__time">
+                    {timeOf(m.at)}
+                    {m.slot !== undefined && slots[m.slot] && <small>{slots[m.slot]!.name}</small>}
+                  </span>
                   <span className="meal__names">{names.join(', ')}</span>
                   <span className="meal__b">
                     <span>
@@ -379,6 +415,26 @@ export function Composer() {
         </div>
         {justLogged && <p className="toast">Pasto registrato.</p>}
 
+        <div className="slots" role="tablist" aria-label="Pasto della giornata">
+          {slots.map((sl, i) => (
+            <button
+              key={i}
+              role="tab"
+              aria-selected={i === activeSlot}
+              className={`slot ${i === activeSlot ? 'is-on' : ''} ${logged.has(i) ? 'is-done' : ''}`}
+              onClick={() => setSlotSel(i)}
+            >
+              <span>{sl.name}</span>
+              <strong>{n1(sl.blocks)}</strong>
+            </button>
+          ))}
+        </div>
+        <p className="slotline">
+          {slot.name}: <strong>{n1(slot.blocks)} blocchi</strong> = {n0(slot.blocks * 7)} g proteine,{' '}
+          {n0(slot.blocks * 9)} g carboidrati, {n1(slot.blocks * 3)} g grassi.
+        </p>
+        <BlockMatrix status={evaluate(plate, slot.blocks, profile.tolerance)} empty={empty} />
+
         <ul className="items">
           {items.map((it, i) => {
             const f = foodMap.get(it.foodId);
@@ -394,14 +450,21 @@ export function Composer() {
                 </li>
               );
             const b = gramsToBlocks(foodMacros(f, it.grams));
-            const step = stepFor(it.grams);
+            const ms = miniStep(f);
+            const step = ms ? Math.max(1, scaleGrams(ms.grams)) : stepFor(it.grams);
+            const nMini = ms ? it.grams / ms.grams : 0;
             const sliderMax = Math.max(50, Math.ceil(Math.max(it.grams * 2, (f.portion?.grams ?? 100) * 2) / 10) * 10);
             return (
               <li key={it.foodId} className="item">
                 <div className="item__top">
                   <MacroSig food={f} label />
                   <span className="item__name">
-                    {f.name} <SourceBadge food={f} />
+                    {f.name} <SourceBadge food={f} /> <ZoneTag food={f} />
+                    {ms && (
+                      <small className="item__mini">
+                        {n1(nMini)} mini-blocchi {MACRO_SHORT[ms.macro]} · 1 = {String(scaleGrams(ms.grams)).replace('.', ',')} g
+                      </small>
+                    )}
                   </span>
                   <button className="x" onClick={() => removeAt(i)} aria-label={`Togli ${f.name}`}>
                     ×
@@ -409,7 +472,7 @@ export function Composer() {
                 </div>
                 <div className="item__row">
                   <div className="grams">
-                    <button className="grams__btn" onClick={() => setGrams(i, it.grams - step)} aria-label="Meno">
+                    <button className="grams__btn" onClick={() => setGrams(i, it.grams - step)} aria-label="Un mini-blocco in meno">
                       −
                     </button>
                     <GramsInput
@@ -419,7 +482,7 @@ export function Composer() {
                       label={`Grammi di ${f.name}`}
                     />
                     <span className="grams__u">g</span>
-                    <button className="grams__btn" onClick={() => setGrams(i, it.grams + step)} aria-label="Più">
+                    <button className="grams__btn" onClick={() => setGrams(i, it.grams + step)} aria-label="Un mini-blocco in più">
                       +
                     </button>
                   </div>
@@ -527,18 +590,14 @@ export function Composer() {
                   className={`seg__btn ${g.kind === group.kind ? 'is-on' : ''}`}
                   onClick={() => setStrategy(g.kind)}
                 >
-                  {g.kind === 'close' && g.targetBlocks >= budget ? 'Chiudi la giornata' : PLAN_TITLE[g.kind]}
+                  {planTitle(g.kind, slot.name, slot.blocks)}
                 </button>
               ))}
             </div>
           )}
           <p className="note">
-            {group.kind === 'adapt'
-              ? `Aggiungi al piatto quello che manca perché la giornata torni pari: ${n1(group.targetBlocks)} blocchi per macro, niente da togliere.`
-              : group.targetBlocks >= budget
-                ? `Un ultimo pasto che porta proteine, carboidrati e grassi a ${n1(budget)} blocchi: giornata chiusa e bilanciata.`
-                : `Un pasto da circa ${n1(group.targetBlocks - status.used)} blocchi che lascia la giornata bilanciata a ${n1(group.targetBlocks)} su ${n1(budget)}.`}
-            {group.targetBlocks > budget + 0.25 && ` Supera il budget di ${n1(group.targetBlocks - budget)} blocchi.`}
+            {planNote(group.kind, slot.name, slot.blocks)}
+            {(group.kind === 'adapt' || group.kind === 'day') && ` Arriva a ${n1(group.targetBlocks)} blocchi per macro.`}
           </p>
           <div className="variants">
             {group.variants.map((p, vi) => {

@@ -6,8 +6,9 @@ import { macroProfile, miniBlockGrams, scaleGrams, MINI_BLOCK } from '../../doma
 import { newId, useFoods } from '../../app/data';
 import { searchFoods } from '../../domain/food/search';
 import { SourceBadge } from '../../ui/SourceBadge';
+import { ZoneTag } from '../../ui/ZoneTag';
 import { MacroSig } from '../../ui/MacroSig';
-import { MACRO_LABEL, MACRO_SHORT, n1 } from '../../ui/format';
+import { MACRO_LABEL, MACRO_SHORT } from '../../ui/format';
 import { FoodForm } from './FoodForm';
 import { ScanButton } from '../scan/ScanButton';
 import { readingNotice } from '../scan/notice';
@@ -119,8 +120,11 @@ export function FoodsScreen() {
       </div>
       <div className="minihead">
         <p className="minihead__t">
-          Grammi per <strong>1 mini-blocco</strong>: {MINI_BLOCK.protein} g proteine · {MINI_BLOCK.carbs} g carboidrati ·{' '}
-          {n1(MINI_BLOCK.fat)} g grassi. Ordina per:
+          Grammi per <strong>1 mini-blocco</strong>: {MINI_BLOCK.protein} g proteine · {MINI_BLOCK.carbs} g carboidrati netti ·{' '}
+          {MINI_BLOCK.fat} g grassi. Un blocco = un mini-blocco di ciascuno, a ogni pasto 1:1:1.
+          <br />
+          Nelle tabelle di Sears il grasso è 1,5 g perché la proteina animale ne porta già 1,5: qui conta tutto il
+          grasso del piatto, quindi 3 g. Ordina per:
         </p>
         <div className="chips">
           {MACROS.map((m) => (
@@ -139,7 +143,7 @@ export function FoodsScreen() {
               <button className="food" onClick={() => setEditing(f)}>
                 <MacroSig food={f} label />
                 <span className="food__name">
-                  {f.name} <SourceBadge food={f} />
+                  {f.name} <SourceBadge food={f} /> <ZoneTag food={f} />
                   {f.ingredients && <span className="badge">piatto</span>}
                 </span>
                 <span className="food__mini" aria-label="Grammi per un mini-blocco">

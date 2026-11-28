@@ -31,8 +31,8 @@ describe('grammi per mini-blocco', async () => {
   it('riso crudo: 9 g di carboidrati in ~11,5 g', () => {
     expect(miniBlockGrams(food('riso-crudo')).carbs).toBeCloseTo(11.54, 2);
   });
-  it('olio: 1,5 g di grassi in 1,5 g', () => {
-    expect(scaleGrams(miniBlockGrams(food('olio-evo')).fat!)).toBe(1.5);
+  it('olio: un mini-blocco di grassi (3 g) = 3 g', () => {
+    expect(scaleGrams(miniBlockGrams(food('olio-evo')).fat!)).toBe(3);
   });
   it('macro quasi assente: nessun valore', () => {
     expect(miniBlockGrams(food('olio-evo')).protein).toBeNull();

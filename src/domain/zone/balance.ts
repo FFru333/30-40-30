@@ -187,7 +187,9 @@ export function balance(input: BalanceInput): Advice[] {
         const r = evaluateChange(input, status, f, grams, m);
         // Preferenze a parità di risultato: ciò che è già nel piatto, alimenti "puri"
         // e quantità piccole (300 g di mela sono meno pratici di 40 g di riso).
-        const bias = (inMeal.has(f.id) ? 0 : 0.15) + (1 - purity(f, m)) * 0.3 + grams / 300;
+        // La Zona preferisce alimenti "ottimi" (verdura, frutta, proteine magre, olio d'oliva).
+        const quality = f.zone === 'scarso' ? 0.5 : f.zone === 'discreto' ? 0.15 : 0;
+        const bias = (inMeal.has(f.id) ? 0 : 0.15) + (1 - purity(f, m)) * 0.3 + grams / 300 + quality;
         scored.push({ suggestion: r.suggestion, cost: r.score, score: r.score + bias });
       }
     } else {

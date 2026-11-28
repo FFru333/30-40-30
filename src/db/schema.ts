@@ -52,6 +52,13 @@ export class ZoneDB extends Dexie {
         const luca = await tx.table<Profile, string>('profiles').get('luca');
         if (luca && luca.dailyKcal === undefined) await tx.table('profiles').update('luca', { dailyKcal: 3000 });
       });
+    // v5: qualità Zona (ottimo / discreto / scarso) sugli alimenti dell'archivio iniziale.
+    this.version(5)
+      .stores({ foods: 'id, name, diet, source', profiles: 'id', drafts: 'id', days: 'id, profileId, date' })
+      .upgrade(async (tx) => {
+        const t = tx.table<Food, string>('foods');
+        for (const seed of SEED_FOODS) if (seed.zone) await t.update(seed.id, { zone: seed.zone });
+      });
     this.on('populate', (tx) => {
       tx.table('foods').bulkAdd(SEED_FOODS);
       tx.table('profiles').bulkAdd(DEFAULT_PROFILES);
